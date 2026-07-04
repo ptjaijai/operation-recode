@@ -1,607 +1,587 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-
 import AppNav from "./AppNav";
+
+type SnackLevel = "none" | "low" | "medium" | "high";
+type MoodLevel = "great" | "good" | "neutral" | "tired" | "bad";
+
 type DailyLog = {
   id: string;
   date: string;
   weight: number;
-  sleepHours: number;
-  waterLiters: number;
-  exercise: string;
-  snackLevel: "none" | "light" | "medium" | "heavy";
-  mood: number;
+  sleep: number;
+  water: number;
+  snackLevel: SnackLevel;
+  mood: MoodLevel;
   notes: string;
 };
 
-const START_WEIGHT = 70;
-const GOAL_WEIGHT = 60;
-const today = new Date().toISOString().slice(0, 10);
+function getLocalDateString(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
 
-const starterLog: DailyLog = {
-  id: "baseline",
-  date: today,
-  weight: 70,
-  sleepHours: 6,
-  waterLiters: 2,
-  exercise: "Baseline",
-  snackLevel: "medium",
-  mood: 7,
-  notes: "Operation: Recode started.",
-};
-
-function getSnackLabel(level: DailyLog["snackLevel"]) {
-  if (level === "none") return "No snacks";
-  if (level === "light") return "Light";
-  if (level === "medium") return "Medium";
-  return "Heavy";
+  return `${year}-${month}-${day}`;
 }
 
-function getSleepScore(hours: number) {
-  if (hours >= 7) return 100;
-  if (hours >= 6) return 75;
-  if (hours >= 5) return 45;
-  return 20;
-}
+const today = getLocalDateString();
 
-function getWaterScore(liters: number) {
-  if (liters >= 2.5) return 100;
-  if (liters >= 2) return 75;
-  if (liters >= 1.5) return 50;
-  return 25;
-}
+function formatDateForMenu(dateString: string) {
+  if (!dateString) return "";
 
-function getSnackScore(level: DailyLog["snackLevel"]) {
-  if (level === "none") return 100;
-  if (level === "light") return 80;
-  if (level === "medium") return 55;
-  return 20;
-}
+  const date = new Date(`${dateString}T00:00:00`);
 
-function getExerciseScore(exercise: string) {
-  const clean = exercise.trim().toLowerCase();
-
-  if (!clean || clean === "baseline") return 0;
-
-  return 100;
-}
-
-function getDailyScore(log: DailyLog) {
-  const sleep = getSleepScore(log.sleepHours);
-  const water = getWaterScore(log.waterLiters);
-  const snack = getSnackScore(log.snackLevel);
-  const exercise = getExerciseScore(log.exercise);
-
-  return Math.round(sleep * 0.25 + water * 0.25 + snack * 0.3 + exercise * 0.2);
-}
-
-function getPriority(log: DailyLog) {
-  const items = [
-    {
-      key: "Sleep",
-      score: getSleepScore(log.sleepHours),
-      message: "คืนนี้พยายามนอนเร็วขึ้น 30 นาที จะช่วยลดความหิวและฟื้นตัวดีขึ้น",
-    },
-    {
-      key: "Water",
-      score: getWaterScore(log.waterLiters),
-      message: "วันนี้เพิ่มน้ำอีกหน่อย เป้าคือ 2.5–3L โดยเฉพาะวันที่ตีแบด",
-    },
-    {
-      key: "Snacks",
-      score: getSnackScore(log.snackLevel),
-      message: "ตัวหลักที่ต้องคุมคือของจุกจิก พรุ่งนี้ลดลงครึ่งหนึ่งพอ ไม่ต้องตัดหมด",
-    },
-    {
-      key: "Exercise",
-      score: getExerciseScore(log.exercise),
-      message: "วันนี้ยังไม่มี exercise log ถ้าไม่ได้ตีแบด ให้ทำเวทที่บ้าน 15–20 นาที",
-    },
-  ];
-
-  return items.sort((a, b) => a.score - b.score)[0];
-}
-
-function getCoachMessage(latest: DailyLog, previous?: DailyLog) {
-  const score = getDailyScore(latest);
-  const priority = getPriority(latest);
-
-  if (!previous) {
-    return `วันนี้คือจุดเริ่มต้น คะแนนวันนี้ ${score}/100 เก็บข้อมูลจริงก่อน ยังไม่ต้องเพอร์เฟกต์ Priority คือ ${priority.key}: ${priority.message}`;
-  }
-
-  const diff = latest.weight - previous.weight;
-
-  if (diff > 0.5) {
-    return `น้ำหนักขึ้นวันนี้ยังไม่ต้องตกใจ อาจเป็นน้ำ โซเดียม คาร์บ หรือเวลาชั่ง คะแนนวันนี้ ${score}/100 Priority คือ ${priority.key}: ${priority.message}`;
-  }
-
-  if (diff < -0.4) {
-    return `น้ำหนักลงดีมาก คะแนนวันนี้ ${score}/100 แต่ต้องกินโปรตีนให้ถึง เพื่อไม่ให้กล้ามหาย Priority คือ ${priority.key}: ${priority.message}`;
-  }
-
-  return `คะแนนวันนี้ ${score}/100 อยู่ในทางที่ดี เป้าหมายไม่ใช่เพอร์เฟกต์ แต่คือไม่หลุดยาว Priority คือ ${priority.key}: ${priority.message}`;
-}
-
-export default function Home() {
-  const [logs, setLogs] = useState<DailyLog[]>([]);
-  const [form, setForm] = useState<DailyLog>({
-    id: crypto.randomUUID(),
-    date: today,
-    weight: 70,
-    sleepHours: 6,
-    waterLiters: 2,
-    exercise: "",
-    snackLevel: "medium",
-    mood: 7,
-    notes: "",
+  return date.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
   });
+}
+
+function shiftDate(dateString: string, days: number) {
+  const [year, month, day] = dateString.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+
+  date.setDate(date.getDate() + days);
+
+  return getLocalDateString(date);
+}
+
+function createEmptyLog(date: string): DailyLog {
+  return {
+    id: crypto.randomUUID(),
+    date,
+    weight: 0,
+    sleep: 0,
+    water: 0,
+    snackLevel: "none",
+    mood: "neutral",
+    notes: "",
+  };
+}
+
+function normalizeSnackLevel(value: unknown): SnackLevel {
+  if (value === "none" || value === "low" || value === "medium" || value === "high") {
+    return value;
+  }
+
+  return "none";
+}
+
+function normalizeMood(value: unknown): MoodLevel {
+  if (
+    value === "great" ||
+    value === "good" ||
+    value === "neutral" ||
+    value === "tired" ||
+    value === "bad"
+  ) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const clean = value.toLowerCase();
+
+    if (clean.includes("great") || clean.includes("ดีมาก")) return "great";
+    if (clean.includes("good") || clean.includes("ดี")) return "good";
+    if (clean.includes("tired") || clean.includes("เหนื่อย")) return "tired";
+    if (clean.includes("bad") || clean.includes("แย่")) return "bad";
+  }
+
+  return "neutral";
+}
+
+function normalizeLog(raw: Record<string, unknown>): DailyLog {
+  return {
+    id: typeof raw.id === "string" ? raw.id : crypto.randomUUID(),
+    date: typeof raw.date === "string" ? raw.date : today,
+
+    weight:
+      typeof raw.weight === "number"
+        ? raw.weight
+        : typeof raw.weightKg === "number"
+        ? raw.weightKg
+        : 0,
+
+    sleep:
+      typeof raw.sleep === "number"
+        ? raw.sleep
+        : typeof raw.sleepHours === "number"
+        ? raw.sleepHours
+        : 0,
+
+    water:
+      typeof raw.water === "number"
+        ? raw.water
+        : typeof raw.waterLiters === "number"
+        ? raw.waterLiters
+        : 0,
+
+    snackLevel: normalizeSnackLevel(raw.snackLevel),
+    mood: normalizeMood(raw.mood),
+    notes: typeof raw.notes === "string" ? raw.notes : "",
+  };
+}
+
+function getSleepScore(sleep: number) {
+  if (sleep >= 7) return 100;
+  if (sleep >= 6) return 75;
+  if (sleep >= 5) return 45;
+  if (sleep > 0) return 25;
+  return 0;
+}
+
+function getWaterScore(water: number) {
+  if (water >= 2.5) return 100;
+  if (water >= 2) return 80;
+  if (water >= 1.5) return 60;
+  if (water > 0) return 30;
+  return 0;
+}
+
+function getSnackScore(snackLevel?: SnackLevel) {
+  if (snackLevel === "none") return 100;
+  if (snackLevel === "low") return 80;
+  if (snackLevel === "medium") return 50;
+  if (snackLevel === "high") return 20;
+  return 50;
+}
+
+function getMoodScore(mood?: MoodLevel) {
+  if (mood === "great") return 100;
+  if (mood === "good") return 80;
+  if (mood === "neutral") return 60;
+  if (mood === "tired") return 40;
+  if (mood === "bad") return 20;
+  return 60;
+}
+
+function getDailyScore(log?: DailyLog) {
+  if (!log) return 0;
+
+  return Math.round(
+    getSleepScore(log.sleep) * 0.35 +
+      getWaterScore(log.water) * 0.3 +
+      getSnackScore(log.snackLevel) * 0.25 +
+      getMoodScore(log.mood) * 0.1
+  );
+}
+
+function getCoachMessage(log?: DailyLog) {
+  if (!log) return "Start by saving today’s check-in.";
+
+  if (log.sleep > 0 && log.sleep < 6) {
+    return "Priority: sleep. Low sleep makes cravings and hunger harder to control.";
+  }
+
+  if (log.water < 2) {
+    return "Priority: water. Push toward 2L today before judging hunger.";
+  }
+
+  if (log.snackLevel === "high") {
+    return "Priority: snack control. Do not starve, just make the next meal cleaner.";
+  }
+
+  if (log.mood === "tired" || log.mood === "bad") {
+    return "Priority: recovery. Keep today simple: water, protein, and no panic eating.";
+  }
+
+  return "Good baseline day. Now use Food and Workout pages to finish the mission.";
+}
+
+function getSnackLabel(level: SnackLevel) {
+  if (level === "none") return "None";
+  if (level === "low") return "Low";
+  if (level === "medium") return "Medium";
+  return "High";
+}
+
+function getMoodLabel(level: MoodLevel) {
+  if (level === "great") return "Great";
+  if (level === "good") return "Good";
+  if (level === "neutral") return "Neutral";
+  if (level === "tired") return "Tired";
+  return "Bad";
+}
+
+export default function DashboardPage() {
+  const [logs, setLogs] = useState<DailyLog[]>([]);
+  const [selectedDate, setSelectedDate] = useState(today);
+  const [form, setForm] = useState<DailyLog>(() => createEmptyLog(today));
 
   useEffect(() => {
     const saved = localStorage.getItem("operation-recode-logs-no-waist");
 
-    if (saved) {
-      setLogs(JSON.parse(saved));
-    } else {
-      setLogs([starterLog]);
-      localStorage.setItem(
-        "operation-recode-logs-no-waist",
-        JSON.stringify([starterLog])
-      );
+    if (!saved) return;
+
+    try {
+      const parsed = JSON.parse(saved);
+
+      if (Array.isArray(parsed)) {
+        setLogs(parsed.map((item) => normalizeLog(item)));
+      }
+    } catch {
+      setLogs([]);
     }
   }, []);
 
   useEffect(() => {
-    if (logs.length > 0) {
-      localStorage.setItem(
-        "operation-recode-logs-no-waist",
-        JSON.stringify(logs)
-      );
-    }
+    localStorage.setItem("operation-recode-logs-no-waist", JSON.stringify(logs));
   }, [logs]);
+
+  const availableDates = useMemo(() => {
+    const dates = new Set<string>();
+
+    dates.add(today);
+
+    logs.forEach((log) => {
+      if (log.date) dates.add(log.date);
+    });
+
+    return Array.from(dates).sort((a, b) => b.localeCompare(a));
+  }, [logs]);
+
+  const selectedLog = useMemo(() => {
+    return logs.find((log) => log.date === selectedDate);
+  }, [logs, selectedDate]);
+
+  useEffect(() => {
+    if (selectedLog) {
+      setForm(selectedLog);
+    } else {
+      setForm(createEmptyLog(selectedDate));
+    }
+  }, [selectedDate, selectedLog]);
 
   const sortedLogs = useMemo(() => {
-    return [...logs].sort((a, b) => a.date.localeCompare(b.date));
+    return logs.slice().sort((a, b) => b.date.localeCompare(a.date));
   }, [logs]);
 
-  const latest = sortedLogs[sortedLogs.length - 1] ?? starterLog;
-  const previous = sortedLogs[sortedLogs.length - 2];
+  const weightLogs = useMemo(() => {
+    return logs
+      .filter((log) => log.weight > 0)
+      .slice()
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [logs]);
 
-  const progress = Math.min(
-    100,
-    Math.max(
-      0,
-      ((START_WEIGHT - latest.weight) / (START_WEIGHT - GOAL_WEIGHT)) * 100
-    )
-  );
+  const latestWeight = weightLogs[weightLogs.length - 1]?.weight ?? 0;
+  const firstWeight = weightLogs[0]?.weight ?? 0;
+  const weightChange = latestWeight && firstWeight ? latestWeight - firstWeight : 0;
 
-  const weightLost = START_WEIGHT - latest.weight;
-  const remaining = latest.weight - GOAL_WEIGHT;
-  const coachMessage = getCoachMessage(latest, previous);
+  const last7Weights = weightLogs.slice(-7);
+  const avg7 =
+    last7Weights.length > 0
+      ? last7Weights.reduce((sum, log) => sum + log.weight, 0) / last7Weights.length
+      : 0;
 
-  const dailyScore = getDailyScore(latest);
-  const sleepScore = getSleepScore(latest.sleepHours);
-  const waterScore = getWaterScore(latest.waterLiters);
-  const snackScore = getSnackScore(latest.snackLevel);
-  const exerciseScore = getExerciseScore(latest.exercise);
-  const priority = getPriority(latest);
-
-  const last7Logs = sortedLogs.slice(-7);
-  const averageWeight =
-    last7Logs.length > 0
-      ? last7Logs.reduce((sum, log) => sum + log.weight, 0) / last7Logs.length
-      : latest.weight;
+  const selectedScore = selectedLog ? getDailyScore(selectedLog) : 0;
+  const latestScore = sortedLogs[0] ? getDailyScore(sortedLogs[0]) : 0;
 
   function saveLog() {
     const newLog: DailyLog = {
       ...form,
-      id: crypto.randomUUID(),
+      id: selectedLog?.id ?? crypto.randomUUID(),
+      date: selectedDate,
       weight: Number(form.weight),
-      sleepHours: Number(form.sleepHours),
-      waterLiters: Number(form.waterLiters),
-      mood: Number(form.mood),
+      sleep: Number(form.sleep),
+      water: Number(form.water),
+      snackLevel: form.snackLevel || "none",
+      mood: form.mood || "neutral",
     };
 
     setLogs((current) => {
-      const withoutSameDate = current.filter((log) => log.date !== newLog.date);
-      return [...withoutSameDate, newLog];
+      const withoutSameDate = current.filter((log) => log.date !== selectedDate);
+      return [...withoutSameDate, newLog].sort((a, b) => a.date.localeCompare(b.date));
     });
-
-    setForm((current) => ({
-      ...current,
-      id: crypto.randomUUID(),
-      exercise: "",
-      notes: "",
-    }));
   }
 
-  function resetData() {
-    const confirmed = window.confirm("Reset all Operation: Recode data?");
-    if (!confirmed) return;
+  function deleteLog(date: string) {
+    setLogs((current) => current.filter((log) => log.date !== date));
 
-    setLogs([starterLog]);
-    localStorage.setItem(
-      "operation-recode-logs-no-waist",
-      JSON.stringify([starterLog])
-    );
+    if (date === selectedDate) {
+      setForm(createEmptyLog(selectedDate));
+    }
   }
-
-  const chartPoints = sortedLogs.slice(-14);
-  const maxWeight = Math.max(
-    ...chartPoints.map((log) => log.weight),
-    START_WEIGHT
-  );
-  const minWeight = Math.min(
-    ...chartPoints.map((log) => log.weight),
-    GOAL_WEIGHT
-  );
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
       <section className="mx-auto min-h-screen w-full max-w-7xl px-5 py-6 md:px-8">
         <AppNav />
-        
+
         <nav className="mb-8 flex items-center justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.35em] text-emerald-400">
               Operation: Recode
             </p>
             <h1 className="mt-2 text-3xl font-black tracking-tight md:text-6xl">
-              Rebuild the body.
+              Daily Dashboard.
               <br />
-              Rewrite the habits.
+              Rebuild the system.
             </h1>
           </div>
 
           <div className="rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-zinc-300">
-            Jai / Phase 1
+            Dashboard / v1.4
           </div>
         </nav>
 
-        <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
-          <section className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 shadow-2xl shadow-emerald-950/20 md:p-6">
-            <div className="flex flex-col justify-between gap-6 md:flex-row">
+        <section className="mb-5 grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+          <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-6 md:p-8">
+            <p className="text-sm text-zinc-400">Current Weight</p>
+
+            <div className="mt-3 flex flex-wrap items-end justify-between gap-5">
               <div>
-                <p className="text-sm text-zinc-400">Main Objective</p>
-                <h2 className="mt-2 text-5xl font-black md:text-7xl">
-                  {latest.weight.toFixed(1)}
-                  <span className="mx-3 text-zinc-500">→</span>
-                  60
-                  <span className="ml-2 text-2xl text-zinc-400">kg</span>
-                </h2>
-                <p className="mt-4 max-w-xl text-sm leading-6 text-zinc-400 md:text-base">
-                  โฟกัสหลักคือ น้ำหนักเฉลี่ย 7 วัน + รูปหุ่นรายสัปดาห์ +
-                  Daily Score ไม่ใช้รอบเอวแล้ว เพราะวัดยากและเพี้ยนง่าย
+                <p className="text-7xl font-black tracking-tight md:text-8xl">
+                  {latestWeight ? latestWeight.toFixed(1) : "-"}
+                  <span className="ml-2 text-3xl text-zinc-500">kg</span>
+                </p>
+                <p className="mt-4 text-sm text-zinc-400">
+                  Target: 60 kg ·{" "}
+                  {weightChange
+                    ? `${weightChange > 0 ? "+" : ""}${weightChange.toFixed(1)} kg from first log`
+                    : "waiting for more data"}
                 </p>
               </div>
 
-              <div className="min-w-44 rounded-2xl bg-zinc-950 p-5">
-                <p className="text-sm text-zinc-500">Daily Score</p>
+              <div className="rounded-3xl bg-zinc-950 p-5">
+                <p className="text-sm text-zinc-500">Latest Score</p>
                 <p className="mt-2 text-5xl font-black">
-                  {dailyScore}
-                  <span className="text-2xl text-zinc-500">/100</span>
-                </p>
-                <div className="mt-4 h-3 overflow-hidden rounded-full bg-zinc-800">
-                  <div
-                    className="h-full rounded-full bg-emerald-400 transition-all"
-                    style={{ width: `${dailyScore}%` }}
-                  />
-                </div>
-                <p className="mt-3 text-xs text-zinc-500">
-                  Priority: {priority.key}
+                  {latestScore}
+                  <span className="text-xl text-zinc-500"> / 100</span>
                 </p>
               </div>
             </div>
+          </div>
 
-            <div className="mt-8 grid gap-4 md:grid-cols-4">
-              <StatCard
-                label="Current Weight"
-                value={latest.weight.toFixed(1)}
-                unit="kg"
-                note="Latest log"
-              />
-              <StatCard
-                label="7-Day Avg"
-                value={averageWeight.toFixed(1)}
-                unit="kg"
-                note="Better than daily weight"
-              />
-              <StatCard
-                label="Goal Weight"
-                value="60.0"
-                unit="kg"
-                note="Operation target"
-              />
-              <StatCard
-                label="Remaining"
-                value={remaining.toFixed(1)}
-                unit="kg"
-                note="To goal"
-              />
+          <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-1">
+            <TopStat label="7-day Avg" value={avg7 ? `${avg7.toFixed(1)} kg` : "-"} />
+            <TopStat label="Selected Date" value={formatDateForMenu(selectedDate)} small />
+            <TopStat label="Selected Score" value={`${selectedScore} / 100`} />
+          </div>
+        </section>
+
+        <section className="mb-5 rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="text-sm text-zinc-400">Date Menu</p>
+              <h2 className="mt-1 text-2xl font-bold">Select Date</h2>
             </div>
 
-            <div className="mt-6">
-              <p className="mb-3 text-sm text-zinc-400">Weight Progress</p>
-              <div className="h-3 overflow-hidden rounded-full bg-zinc-800">
-                <div
-                  className="h-full rounded-full bg-emerald-400 transition-all"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-              <p className="mt-2 text-xs text-zinc-500">
-                Lost {weightLost.toFixed(1)} kg / Remaining{" "}
-                {remaining.toFixed(1)} kg
-              </p>
-            </div>
-          </section>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => setSelectedDate(shiftDate(selectedDate, -1))}
+                className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-300 hover:bg-zinc-800"
+              >
+                ← Prev
+              </button>
 
-          <section className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
+              <button
+                onClick={() => setSelectedDate(today)}
+                className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-black text-zinc-950 hover:bg-emerald-300"
+              >
+                Today
+              </button>
+
+              <button
+                onClick={() => setSelectedDate(shiftDate(selectedDate, 1))}
+                className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-300 hover:bg-zinc-800"
+              >
+                Next →
+              </button>
+
+              <select
+                value={selectedDate}
+                onChange={(event) => setSelectedDate(event.target.value)}
+                className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
+              >
+                {availableDates.map((date) => (
+                  <option key={date} value={date}>
+                    {date === today ? "Today — " : ""}
+                    {formatDateForMenu(date)}
+                  </option>
+                ))}
+              </select>
+
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(event) => setSelectedDate(event.target.value)}
+                className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
+              />
+            </div>
+          </div>
+        </section>
+
+        <section className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+          <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
             <p className="text-sm text-zinc-400">Daily Check-in</p>
-            <h3 className="mt-1 text-2xl font-bold">Log today</h3>
+            <h2 className="mt-1 text-2xl font-bold">
+              {selectedLog ? "Update baseline" : "Create baseline"}
+            </h2>
 
             <div className="mt-5 grid gap-3 md:grid-cols-2">
               <Input
-                label="Date"
-                type="date"
-                value={form.date}
-                onChange={(value) => setForm({ ...form, date: value })}
-              />
-              <Input
                 label="Weight (kg)"
                 type="number"
+                step="0.1"
                 value={String(form.weight)}
                 onChange={(value) => setForm({ ...form, weight: Number(value) })}
               />
+
               <Input
                 label="Sleep (hours)"
                 type="number"
-                value={String(form.sleepHours)}
-                onChange={(value) =>
-                  setForm({ ...form, sleepHours: Number(value) })
-                }
+                step="0.1"
+                value={String(form.sleep)}
+                onChange={(value) => setForm({ ...form, sleep: Number(value) })}
               />
-              <Input
-                label="Water (liters)"
-                type="number"
-                value={String(form.waterLiters)}
-                onChange={(value) =>
-                  setForm({ ...form, waterLiters: Number(value) })
-                }
-              />
-              <Input
-                label="Exercise"
-                type="text"
-                value={form.exercise}
-                onChange={(value) => setForm({ ...form, exercise: value })}
-              />
-              <Input
-                label="Mood (1-10)"
-                type="number"
-                value={String(form.mood)}
-                onChange={(value) => setForm({ ...form, mood: Number(value) })}
-              />
-            </div>
 
-            <label className="mt-3 block">
-              <span className="text-xs text-zinc-500">Snack Level</span>
-              <select
-                value={form.snackLevel}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    snackLevel: event.target.value as DailyLog["snackLevel"],
-                  })
-                }
-                className="mt-1 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
-              >
-                <option value="none">No snacks</option>
-                <option value="light">Light</option>
-                <option value="medium">Medium</option>
-                <option value="heavy">Heavy</option>
-              </select>
-            </label>
+              <Input
+                label="Water (L)"
+                type="number"
+                step="0.1"
+                value={String(form.water)}
+                onChange={(value) => setForm({ ...form, water: Number(value) })}
+              />
+
+              <label className="block">
+                <span className="text-xs text-zinc-500">Snack Level</span>
+                <select
+                  value={form.snackLevel}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      snackLevel: event.target.value as SnackLevel,
+                    })
+                  }
+                  className="mt-1 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
+                >
+                  <option value="none">None</option>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </label>
+
+              <label className="block md:col-span-2">
+                <span className="text-xs text-zinc-500">Mood</span>
+                <select
+                  value={form.mood}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      mood: event.target.value as MoodLevel,
+                    })
+                  }
+                  className="mt-1 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
+                >
+                  <option value="great">Great</option>
+                  <option value="good">Good</option>
+                  <option value="neutral">Neutral</option>
+                  <option value="tired">Tired</option>
+                  <option value="bad">Bad</option>
+                </select>
+              </label>
+            </div>
 
             <label className="mt-3 block">
               <span className="text-xs text-zinc-500">Notes</span>
               <textarea
                 value={form.notes}
-                onChange={(event) =>
-                  setForm({ ...form, notes: event.target.value })
-                }
-                placeholder="เช่น วันนี้ตีแบด 3 ชม. / กินหมูกระทะ / นอนดึก"
+                onChange={(event) => setForm({ ...form, notes: event.target.value })}
+                placeholder="เช่น วันนี้หิวบ่อย / นอนน้อย / เครียด / กินหลุด"
                 className="mt-1 min-h-24 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
               />
             </label>
 
-            <div className="mt-4 flex gap-3">
-              <button
-                onClick={saveLog}
-                className="flex-1 rounded-2xl bg-emerald-400 px-5 py-3 font-bold text-zinc-950 transition hover:bg-emerald-300"
-              >
-                Save Check-in
-              </button>
-              <button
-                onClick={resetData}
-                className="rounded-2xl border border-zinc-800 px-5 py-3 text-sm text-zinc-400 transition hover:bg-zinc-800"
-              >
-                Reset
-              </button>
-            </div>
-          </section>
-        </div>
+            <button
+              onClick={saveLog}
+              className="mt-4 w-full rounded-2xl bg-emerald-400 px-5 py-3 font-bold text-zinc-950 transition hover:bg-emerald-300"
+            >
+              {selectedLog ? "Update Check-in" : "Save Check-in"}
+            </button>
+          </div>
 
-        <div className="mt-5 grid gap-5 xl:grid-cols-[0.85fr_1.15fr]">
-          <section className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
-            <p className="text-sm text-zinc-400">AI Coach Lite</p>
-            <h3 className="mt-1 text-2xl font-bold">Coach Note</h3>
-            <p className="mt-4 rounded-2xl bg-zinc-950 p-4 text-sm leading-6 text-zinc-300">
-              {coachMessage}
-            </p>
+          <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
+            <p className="text-sm text-zinc-400">Selected Day Score</p>
+            <h2 className="mt-1 text-2xl font-bold">{formatDateForMenu(selectedDate)}</h2>
 
-            <div className="mt-5 grid gap-3">
-              <ScoreRow label="Sleep" score={sleepScore} detail={`${latest.sleepHours.toFixed(1)} hr`} />
-              <ScoreRow label="Water" score={waterScore} detail={`${latest.waterLiters.toFixed(1)} L`} />
-              <ScoreRow label="Snacks" score={snackScore} detail={getSnackLabel(latest.snackLevel)} />
-              <ScoreRow label="Exercise" score={exerciseScore} detail={latest.exercise || "No log"} />
-            </div>
-          </section>
+            <div className="mt-6 rounded-3xl bg-zinc-950 p-5">
+              <p className="text-sm text-zinc-500">Baseline Score</p>
+              <p className="mt-2 text-6xl font-black">
+                {selectedScore}
+                <span className="text-xl text-zinc-500"> / 100</span>
+              </p>
 
-          <section className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-zinc-400">Progress</p>
-                <h3 className="mt-1 text-2xl font-bold">Weight Trend</h3>
+              <div className="mt-4 h-3 overflow-hidden rounded-full bg-zinc-800">
+                <div
+                  className="h-full rounded-full bg-emerald-400 transition-all"
+                  style={{ width: `${selectedScore}%` }}
+                />
               </div>
-              <p className="rounded-full bg-zinc-950 px-3 py-1 text-xs text-zinc-500">
-                Last {chartPoints.length} logs
+
+              <p className="mt-5 text-sm leading-6 text-zinc-300">
+                {getCoachMessage(selectedLog)}
               </p>
             </div>
 
-            <div className="mt-6 h-56 rounded-2xl bg-zinc-950 p-4">
-              <svg viewBox="0 0 600 180" className="h-full w-full">
-                <line x1="20" y1="150" x2="580" y2="150" stroke="#27272a" />
-                <line x1="20" y1="30" x2="580" y2="30" stroke="#27272a" />
-                {chartPoints.map((log, index) => {
-                  const x =
-                    chartPoints.length === 1
-                      ? 300
-                      : 20 + (index / (chartPoints.length - 1)) * 560;
-                  const y =
-                    150 -
-                    ((log.weight - minWeight) /
-                      Math.max(1, maxWeight - minWeight)) *
-                      120;
-
-                  return (
-                    <g key={log.id}>
-                      <circle cx={x} cy={y} r="5" fill="#34d399" />
-                      <text
-                        x={x}
-                        y={y - 10}
-                        textAnchor="middle"
-                        fontSize="11"
-                        fill="#a1a1aa"
-                      >
-                        {log.weight.toFixed(1)}
-                      </text>
-                    </g>
-                  );
-                })}
-              </svg>
-            </div>
-
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
-              <StatCard
-                label="Water"
-                value={latest.waterLiters.toFixed(1)}
-                unit="L"
-                note="Last check-in"
-              />
-              <StatCard
+            <div className="mt-4 grid gap-3 md:grid-cols-4">
+              <MiniScore label="Sleep" score={selectedLog ? getSleepScore(selectedLog.sleep) : 0} />
+              <MiniScore label="Water" score={selectedLog ? getWaterScore(selectedLog.water) : 0} />
+              <MiniScore
                 label="Snack"
-                value={getSnackLabel(latest.snackLevel)}
-                unit=""
-                note="Last check-in"
+                score={selectedLog ? getSnackScore(selectedLog.snackLevel) : 0}
               />
-              <StatCard
-                label="Photo Check"
-                value="Weekly"
-                unit=""
-                note="Use mirror photos"
-              />
+              <MiniScore label="Mood" score={selectedLog ? getMoodScore(selectedLog.mood) : 0} />
             </div>
-          </section>
-        </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <SmallInfo label="Snack" value={selectedLog ? getSnackLabel(selectedLog.snackLevel) : "-"} />
+              <SmallInfo label="Mood" value={selectedLog ? getMoodLabel(selectedLog.mood) : "-"} />
+            </div>
+          </div>
+        </section>
 
         <section className="mt-5 rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-zinc-400">History</p>
-              <h3 className="mt-1 text-2xl font-bold">Latest Logs</h3>
-            </div>
-            <p className="text-sm text-zinc-500">{logs.length} entries</p>
-          </div>
+          <p className="text-sm text-zinc-400">History</p>
+          <h3 className="mt-1 text-2xl font-bold">Check-in logs</h3>
 
           <div className="mt-5 grid gap-3">
-            {[...sortedLogs]
-              .reverse()
-              .slice(0, 7)
-              .map((log) => (
+            {sortedLogs.length === 0 ? (
+              <div className="rounded-2xl bg-zinc-950 p-5 text-sm text-zinc-500">
+                No check-in logs yet
+              </div>
+            ) : (
+              sortedLogs.map((log) => (
                 <div
                   key={log.id}
-                  className="grid gap-3 rounded-2xl bg-zinc-950 p-4 text-sm md:grid-cols-7 md:items-center"
+                  className="grid gap-3 rounded-2xl bg-zinc-950 p-4 text-sm md:grid-cols-[1fr_1fr_1fr_1fr_1fr_auto] md:items-center"
                 >
                   <div>
-                    <p className="font-bold">{log.date}</p>
-                    <p className="text-zinc-500">Mood {log.mood}/10</p>
+                    <p className="font-bold">{formatDateForMenu(log.date)}</p>
+                    <p className="text-zinc-500">Score {getDailyScore(log)}/100</p>
                   </div>
-                  <p>{log.weight.toFixed(1)} kg</p>
-                  <p>{getDailyScore(log)}/100</p>
-                  <p>{log.sleepHours.toFixed(1)} hr sleep</p>
-                  <p>{log.waterLiters.toFixed(1)} L water</p>
-                  <p>{getSnackLabel(log.snackLevel)}</p>
-                  <p className="text-zinc-500">{log.exercise || log.notes || "-"}</p>
+
+                  <p>{log.weight ? `${log.weight} kg` : "-"}</p>
+                  <p>{log.sleep ? `${log.sleep} hr sleep` : "-"}</p>
+                  <p>{log.water ? `${log.water} L water` : "-"}</p>
+                  <p>Mood: {getMoodLabel(log.mood)}</p>
+
+                  <button
+                    onClick={() => deleteLog(log.date)}
+                    className="rounded-xl border border-zinc-800 px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800"
+                  >
+                    Delete
+                  </button>
                 </div>
-              ))}
+              ))
+            )}
           </div>
         </section>
       </section>
     </main>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  unit,
-  note,
-}: {
-  label: string;
-  value: string;
-  unit: string;
-  note: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
-      <p className="text-xs text-zinc-500">{label}</p>
-      <p className="mt-3 text-3xl font-bold">
-        {value}
-        {unit && <span className="ml-1 text-base text-zinc-500">{unit}</span>}
-      </p>
-      <p className="mt-2 text-xs text-zinc-500">{note}</p>
-    </div>
-  );
-}
-
-function ScoreRow({
-  label,
-  score,
-  detail,
-}: {
-  label: string;
-  score: number;
-  detail: string;
-}) {
-  return (
-    <div className="rounded-2xl bg-zinc-950 p-4">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="font-bold">{label}</p>
-          <p className="text-xs text-zinc-500">{detail}</p>
-        </div>
-        <p className="text-lg font-black">
-          {score}
-          <span className="text-xs text-zinc-500">/100</span>
-        </p>
-      </div>
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-zinc-800">
-        <div
-          className="h-full rounded-full bg-emerald-400"
-          style={{ width: `${score}%` }}
-        />
-      </div>
-    </div>
   );
 }
 
@@ -610,21 +590,59 @@ function Input({
   type,
   value,
   onChange,
+  step,
 }: {
   label: string;
   type: string;
   value: string;
   onChange: (value: string) => void;
+  step?: string;
 }) {
   return (
     <label className="block">
       <span className="text-xs text-zinc-500">{label}</span>
       <input
         type={type}
+        step={step}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className="mt-1 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
       />
     </label>
+  );
+}
+
+function MiniScore({ label, score }: { label: string; score: number }) {
+  return (
+    <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+      <p className="text-xs text-zinc-500">{label}</p>
+      <p className="mt-2 text-3xl font-black">{score}</p>
+    </div>
+  );
+}
+
+function TopStat({
+  label,
+  value,
+  small,
+}: {
+  label: string;
+  value: string;
+  small?: boolean;
+}) {
+  return (
+    <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5">
+      <p className="text-sm text-zinc-400">{label}</p>
+      <p className={`mt-3 font-black ${small ? "text-2xl" : "text-4xl"}`}>{value}</p>
+    </div>
+  );
+}
+
+function SmallInfo({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+      <p className="text-xs text-zinc-500">{label}</p>
+      <p className="mt-2 text-sm font-bold">{value}</p>
+    </div>
   );
 }

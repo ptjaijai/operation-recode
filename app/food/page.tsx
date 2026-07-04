@@ -142,26 +142,26 @@ function getFoodCoachMessage({
   junkCount: number;
 }) {
   if (protein === 0) {
-    return "No food log yet. Start by adding your first meal and estimate protein roughly.";
+    return "No food log yet. Add your first meal and estimate protein roughly.";
   }
 
   if (protein < 80) {
-    return "Protein is still low. Push closer to 100–120g so weight loss does not make you look flat.";
+    return "Protein is still low. Try to get closer to 100–120g today.";
   }
 
   if (sweetDrinkCount > 0) {
-    return "Sweet drink logged today. Keep the next drink zero-calorie or water.";
+    return "Sweet drink logged. Next drink should be water or zero-calorie.";
   }
 
   if (junkCount > 0) {
-    return "Junk food logged today. Do not starve. Just make the next meal cleaner and high-protein.";
+    return "Junk food logged. Do not starve. Just make the next meal cleaner.";
   }
 
   if (protein >= 120) {
-    return "Protein target reached. Great. Now keep calories controlled and avoid random snacks.";
+    return "Protein target reached. Good. Now avoid random snacks.";
   }
 
-  return "Good progress. One more protein-focused meal or whey can help you hit the target.";
+  return "Good progress. One more protein-focused meal or whey can finish the target.";
 }
 
 export default function FoodPage() {
@@ -215,6 +215,7 @@ export default function FoodPage() {
   const totalProtein = selectedLogs.reduce((sum, log) => sum + log.protein, 0);
   const proteinLeft = Math.max(proteinGoal - totalProtein, 0);
   const proteinScore = getProteinScore(totalProtein);
+  const proteinPercent = Math.min((totalProtein / proteinGoal) * 100, 100);
 
   const sweetDrinkCount = selectedLogs.filter((log) => log.sweetDrink).length;
   const junkCount = selectedLogs.filter((log) => log.junkFood).length;
@@ -254,56 +255,14 @@ export default function FoodPage() {
             <h1 className="mt-2 text-3xl font-black tracking-tight md:text-6xl">
               Food Tracker.
               <br />
-              Protein first.
+              Log meals only.
             </h1>
           </div>
 
           <div className="rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-zinc-300">
-            Food / v1.1
+            Food / v1.2
           </div>
         </nav>
-
-        <section className="mb-5 grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-6 md:p-8">
-            <p className="text-sm text-zinc-400">Protein Today</p>
-
-            <div className="mt-3 flex flex-wrap items-end justify-between gap-5">
-              <div>
-                <p className="text-7xl font-black tracking-tight md:text-8xl">
-                  {totalProtein}
-                  <span className="ml-2 text-3xl text-zinc-500">g</span>
-                </p>
-                <p className="mt-4 text-sm text-zinc-400">
-                  Goal: 120g ·{" "}
-                  {proteinLeft > 0 ? `${proteinLeft}g left` : "target reached"}
-                </p>
-              </div>
-
-              <div className="rounded-3xl bg-zinc-950 p-5">
-                <p className="text-sm text-zinc-500">Protein Score</p>
-                <p className="mt-2 text-5xl font-black">
-                  {proteinScore}
-                  <span className="text-xl text-zinc-500"> / 100</span>
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-5 h-3 overflow-hidden rounded-full bg-zinc-800">
-              <div
-                className="h-full rounded-full bg-emerald-400 transition-all"
-                style={{
-                  width: `${Math.min((totalProtein / proteinGoal) * 100, 100)}%`,
-                }}
-              />
-            </div>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-1">
-            <TopStat label="Selected Date" value={formatDateForMenu(selectedDate)} small />
-            <TopStat label="Sweet Drinks" value={String(sweetDrinkCount)} />
-            <TopStat label="Junk Food" value={String(junkCount)} />
-          </div>
-        </section>
 
         <section className="mb-5 rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -439,11 +398,48 @@ export default function FoodPage() {
           </div>
 
           <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
-            <p className="text-sm text-zinc-400">Food Coach</p>
+            <p className="text-sm text-zinc-400">Today Summary</p>
             <h2 className="mt-1 text-2xl font-bold">{formatDateForMenu(selectedDate)}</h2>
 
-            <div className="mt-6 rounded-3xl bg-zinc-950 p-5">
-              <p className="text-sm text-zinc-500">Coach Lite</p>
+            <div className="mt-5 rounded-3xl bg-zinc-950 p-5">
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                  <p className="text-sm text-zinc-500">Protein</p>
+                  <p className="mt-2 text-5xl font-black">
+                    {totalProtein}
+                    <span className="ml-1 text-xl text-zinc-500">g</span>
+                  </p>
+                </div>
+
+                <div className="text-right">
+                  <p className="text-sm text-zinc-500">Score</p>
+                  <p className="mt-2 text-4xl font-black">
+                    {proteinScore}
+                    <span className="text-lg text-zinc-500"> / 100</span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 h-3 overflow-hidden rounded-full bg-zinc-800">
+                <div
+                  className="h-full rounded-full bg-emerald-400 transition-all"
+                  style={{ width: `${proteinPercent}%` }}
+                />
+              </div>
+
+              <p className="mt-3 text-sm text-zinc-400">
+                Goal 120g · {proteinLeft > 0 ? `${proteinLeft}g left` : "target reached"}
+              </p>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <SmallStat label="Items" value={String(selectedLogs.length)} />
+              <SmallStat label="Sweet Drinks" value={String(sweetDrinkCount)} />
+              <SmallStat label="Junk Food" value={String(junkCount)} />
+            </div>
+
+            <div className="mt-4 rounded-3xl bg-zinc-950 p-5">
+              <p className="text-sm text-zinc-500">Food Coach Lite</p>
               <p className="mt-3 text-sm leading-6 text-zinc-300">
                 {getFoodCoachMessage({
                   protein: totalProtein,
@@ -451,12 +447,6 @@ export default function FoodPage() {
                   junkCount,
                 })}
               </p>
-            </div>
-
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
-              <SmallStat label="Protein" value={`${totalProtein}g`} />
-              <SmallStat label="Left" value={`${proteinLeft}g`} />
-              <SmallStat label="Items" value={String(selectedLogs.length)} />
             </div>
           </div>
         </section>
@@ -534,25 +524,6 @@ function Input({
         className="mt-1 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
       />
     </label>
-  );
-}
-
-function TopStat({
-  label,
-  value,
-  small,
-}: {
-  label: string;
-  value: string;
-  small?: boolean;
-}) {
-  return (
-    <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5">
-      <p className="text-sm text-zinc-400">{label}</p>
-      <p className={`mt-3 font-black ${small ? "text-2xl" : "text-4xl"}`}>
-        {value}
-      </p>
-    </div>
   );
 }
 

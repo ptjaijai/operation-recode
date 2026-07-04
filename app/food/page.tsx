@@ -16,6 +16,25 @@ type FoodLog = {
   notes: string;
 };
 
+type Goals = {
+  targetWeight: number;
+  proteinGoal: number;
+  waterGoal: number;
+  sleepGoal: number;
+};
+
+const storageKeys = {
+  food: "operation-recode-food-logs",
+  goals: "operation-recode-goals",
+};
+
+const defaultGoals: Goals = {
+  targetWeight: 60,
+  proteinGoal: 120,
+  waterGoal: 2,
+  sleepGoal: 7,
+};
+
 function getLocalDateString(date = new Date()) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -25,7 +44,37 @@ function getLocalDateString(date = new Date()) {
 }
 
 const today = getLocalDateString();
-const proteinGoal = 120;
+
+function loadGoals(): Goals {
+  const saved = localStorage.getItem(storageKeys.goals);
+
+  if (!saved) return defaultGoals;
+
+  try {
+    const parsed = JSON.parse(saved) as Partial<Goals>;
+
+    return {
+      targetWeight:
+        typeof parsed.targetWeight === "number"
+          ? parsed.targetWeight
+          : defaultGoals.targetWeight,
+      proteinGoal:
+        typeof parsed.proteinGoal === "number"
+          ? parsed.proteinGoal
+          : defaultGoals.proteinGoal,
+      waterGoal:
+        typeof parsed.waterGoal === "number"
+          ? parsed.waterGoal
+          : defaultGoals.waterGoal,
+      sleepGoal:
+        typeof parsed.sleepGoal === "number"
+          ? parsed.sleepGoal
+          : defaultGoals.sleepGoal,
+    };
+  } catch {
+    return defaultGoals;
+  }
+}
 
 function formatDateForMenu(dateString: string) {
   if (!dateString) return "";
@@ -123,30 +172,34 @@ function getMealLabel(type: MealType) {
   return "Other";
 }
 
-function getProteinScore(protein: number) {
-  if (protein >= 120) return 100;
-  if (protein >= 100) return 85;
-  if (protein >= 80) return 65;
-  if (protein >= 60) return 45;
+function getProteinScore(protein: number, proteinGoal: number) {
+  if (protein >= proteinGoal) return 100;
+  if (protein >= proteinGoal * 0.85) return 85;
+  if (protein >= proteinGoal * 0.65) return 65;
+  if (protein >= proteinGoal * 0.5) return 45;
   if (protein > 0) return 25;
   return 0;
 }
 
 function getFoodCoachMessage({
   protein,
+  proteinGoal,
   sweetDrinkCount,
   junkCount,
 }: {
   protein: number;
+  proteinGoal: number;
   sweetDrinkCount: number;
   junkCount: number;
 }) {
+  const proteinLeft = Math.max(proteinGoal - protein, 0);
+
   if (protein === 0) {
     return "No food log yet. Add your first meal and estimate protein roughly.";
   }
 
-  if (protein < 80) {
-    return "Protein is still low. Try to get closer to 100–120g today.";
+  if (protein < proteinGoal * 0.65) {
+    return `Protein is still low. Try to add around ${proteinLeft}g more protein today.`;
   }
 
   if (sweetDrinkCount > 0) {
@@ -157,20 +210,23 @@ function getFoodCoachMessage({
     return "Junk food logged. Do not starve. Just make the next meal cleaner.";
   }
 
-  if (protein >= 120) {
+  if (protein >= proteinGoal) {
     return "Protein target reached. Good. Now avoid random snacks.";
   }
 
-  return "Good progress. One more protein-focused meal or whey can finish the target.";
+  return `Good progress. About ${proteinLeft}g protein left to hit today’s goal.`;
 }
 
 export default function FoodPage() {
   const [logs, setLogs] = useState<FoodLog[]>([]);
+  const [goals, setGoals] = useState<Goals>(defaultGoals);
   const [selectedDate, setSelectedDate] = useState(today);
   const [form, setForm] = useState<FoodLog>(() => createEmptyForm(today));
 
   useEffect(() => {
-    const saved = localStorage.getItem("operation-recode-food-logs");
+    setGoals(loadGoals());
+
+    const saved = localStorage.getItem(storageKeys.food);
 
     if (!saved) return;
 
@@ -186,7 +242,7 @@ export default function FoodPage() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("operation-recode-food-logs", JSON.stringify(logs));
+    localStorage.setItem(storageKeys.food, JSON.stringify(logs));
   }, [logs]);
 
   useEffect(() => {
@@ -213,9 +269,9 @@ export default function FoodPage() {
   }, [logs, selectedDate]);
 
   const totalProtein = selectedLogs.reduce((sum, log) => sum + log.protein, 0);
-  const proteinLeft = Math.max(proteinGoal - totalProtein, 0);
-  const proteinScore = getProteinScore(totalProtein);
-  const proteinPercent = Math.min((totalProtein / proteinGoal) * 100, 100);
+  const proteinLeft = Math.max(goals.proteinGoal - totalProtein, 0);
+  const proteinScore = getProteinScore(totalProtein, goals.proteinGoal);
+  const proteinPercent = Math.min((totalProtein / goals.proteinGoal) * 100, 100);
 
   const sweetDrinkCount = selectedLogs.filter((log) => log.sweetDrink).length;
   const junkCount = selectedLogs.filter((log) => log.junkFood).length;
@@ -260,7 +316,7 @@ export default function FoodPage() {
           </div>
 
           <div className="rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-zinc-300">
-            Food / v1.2
+            Food / v1.3
           </div>
         </nav>
 
@@ -341,7 +397,7 @@ export default function FoodPage() {
               </label>
 
               <Input
-                label="Protein (g)"
+                label={`Protein (g) / Goal ${goals.proteinGoal}g`}
                 type="number"
                 value={String(form.protein)}
                 onChange={(value) => setForm({ ...form, protein: Number(value) })}
@@ -412,10 +468,10 @@ export default function FoodPage() {
                 </div>
 
                 <div className="text-right">
-                  <p className="text-sm text-zinc-500">Score</p>
+                  <p className="text-sm text-zinc-500">Goal</p>
                   <p className="mt-2 text-4xl font-black">
-                    {proteinScore}
-                    <span className="text-lg text-zinc-500"> / 100</span>
+                    {goals.proteinGoal}
+                    <span className="text-lg text-zinc-500">g</span>
                   </p>
                 </div>
               </div>
@@ -428,7 +484,8 @@ export default function FoodPage() {
               </div>
 
               <p className="mt-3 text-sm text-zinc-400">
-                Goal 120g · {proteinLeft > 0 ? `${proteinLeft}g left` : "target reached"}
+                Score {proteinScore}/100 ·{" "}
+                {proteinLeft > 0 ? `${proteinLeft}g left` : "target reached"}
               </p>
             </div>
 
@@ -443,6 +500,7 @@ export default function FoodPage() {
               <p className="mt-3 text-sm leading-6 text-zinc-300">
                 {getFoodCoachMessage({
                   protein: totalProtein,
+                  proteinGoal: goals.proteinGoal,
                   sweetDrinkCount,
                   junkCount,
                 })}

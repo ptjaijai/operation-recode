@@ -8,6 +8,7 @@ const links = [
   { href: "/workout", label: "Workout" },
   { href: "/coach", label: "Coach" },
   { href: "/progress", label: "Progress" },
+  { href: "/settings", label: "Settings" },
 ];
 
 export default function AppNav() {

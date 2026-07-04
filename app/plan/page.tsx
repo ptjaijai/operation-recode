@@ -8,6 +8,7 @@ type Goals = {
   proteinGoal: number;
   waterGoal: number;
   sleepGoal: number;
+  workoutGoal: number;
 };
 
 type DailyLog = {
@@ -47,6 +48,7 @@ const defaultGoals: Goals = {
   proteinGoal: 120,
   waterGoal: 2,
   sleepGoal: 7,
+  workoutGoal: 30,
 };
 
 function getLocalDateString(date = new Date()) {
@@ -95,6 +97,10 @@ function loadGoals(): Goals {
         typeof parsed.sleepGoal === "number"
           ? parsed.sleepGoal
           : defaultGoals.sleepGoal,
+      workoutGoal:
+        typeof parsed.workoutGoal === "number"
+          ? parsed.workoutGoal
+          : defaultGoals.workoutGoal,
     };
   } catch {
     return defaultGoals;
@@ -199,8 +205,8 @@ function getStatusText({
     return "โปรตีนยังต่ำ วันนี้ต้องเติมโปรตีนก่อนขนม";
   }
 
-  if (workoutMinutes === 0) {
-    return "วันนี้ยังไม่มี movement อย่างน้อยเดินหรือ workout สั้น ๆ";
+  if (workoutMinutes < goals.workoutGoal) {
+    return `วันนี้ movement ยังไม่ถึงเป้า ต้องขยับให้ครบ ${goals.workoutGoal} นาที`;
   }
 
   if (dailyLog.sleep < goals.sleepGoal - 1) {
@@ -247,6 +253,8 @@ export default function PlanPage() {
     0
   );
 
+  const workoutLeft = Math.max(goals.workoutGoal - workoutMinutes, 0);
+
   const sweetDrinkCount = todayFoodLogs.filter((log) => log.sweetDrink).length;
   const junkCount = todayFoodLogs.filter((log) => log.junkFood).length;
 
@@ -281,11 +289,11 @@ export default function PlanPage() {
 
     items.push({
       label: "Movement",
-      done: workoutMinutes >= 30,
+      done: workoutMinutes >= goals.workoutGoal,
       detail:
-        workoutMinutes >= 30
-          ? `${workoutMinutes} min`
-          : `${workoutMinutes} min / 30 min`,
+        workoutMinutes >= goals.workoutGoal
+          ? `${workoutMinutes} min / ${goals.workoutGoal} min`
+          : `ขาดอีก ${workoutLeft} min`,
       href: "/workout",
     });
 
@@ -299,7 +307,7 @@ export default function PlanPage() {
     });
 
     return items;
-  }, [dailyLog, totalProtein, goals, proteinLeft, workoutMinutes]);
+  }, [dailyLog, totalProtein, goals, proteinLeft, workoutMinutes, workoutLeft]);
 
   const completedMissions = missions.filter((mission) => mission.done).length;
   const completionPercent = Math.round((completedMissions / missions.length) * 100);
@@ -322,7 +330,7 @@ export default function PlanPage() {
           </div>
 
           <div className="rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-zinc-300">
-            Plan / v0.2
+            Plan / v0.3
           </div>
         </nav>
 
@@ -360,13 +368,21 @@ export default function PlanPage() {
           </div>
 
           <div className="grid gap-3">
-            <GoalCard label="Protein Today" value={`${totalProtein}g`} note={`Goal ${goals.proteinGoal}g`} />
+            <GoalCard
+              label="Protein Today"
+              value={`${totalProtein}g`}
+              note={`Goal ${goals.proteinGoal}g`}
+            />
             <GoalCard
               label="Water Today"
               value={dailyLog ? `${dailyLog.water}L` : "-"}
               note={`Goal ${goals.waterGoal}L`}
             />
-            <GoalCard label="Workout Today" value={`${workoutMinutes} min`} note="Goal 30 min minimum" />
+            <GoalCard
+              label="Workout Today"
+              value={`${workoutMinutes} min`}
+              note={`Goal ${goals.workoutGoal} min`}
+            />
             <GoalCard
               label="Sleep"
               value={dailyLog ? `${dailyLog.sleep}h` : "-"}
@@ -399,20 +415,22 @@ export default function PlanPage() {
             items={[
               "มื้อถัดไปเริ่มจากโปรตีนก่อน",
               "ถ้าขาดเยอะ ใช้เวย์ช่วยได้",
-              sweetDrinkCount > 0 ? "วันนี้มีน้ำหวานแล้ว ต่อไปเอาน้ำเปล่า/zero" : "ยังไม่มีน้ำหวาน ดีแล้ว",
+              sweetDrinkCount > 0
+                ? "วันนี้มีน้ำหวานแล้ว ต่อไปเอาน้ำเปล่า/zero"
+                : "ยังไม่มีน้ำหวาน ดีแล้ว",
               junkCount > 0 ? "วันนี้มี junk แล้ว มื้อต่อไป clean" : "ยังไม่มี junk ดีมาก",
             ]}
           />
 
           <PlanCard
             title="Workout Plan"
-            tag={workoutMinutes >= 30 ? "done" : "ยังต้องขยับ"}
+            tag={workoutMinutes >= goals.workoutGoal ? "done" : `${workoutLeft} min left`}
             items={[
               workoutMinutes > 0
                 ? `วันนี้ขยับแล้ว ${workoutMinutes} นาที`
                 : "วันนี้ยังไม่ได้ log workout",
-              "ถ้าไม่มีเวลา เดิน 30 นาทีพอ",
-              "ถ้าอยู่บ้าน ทำ push-up / squat / plank",
+              `เป้าวันนี้คือ ${goals.workoutGoal} นาที`,
+              "ถ้าไม่มีเวลา เดินเร็วหรือ home workout สั้น ๆ",
               "ตีแบดก็นับเป็น workout ได้",
             ]}
           />

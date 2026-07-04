@@ -68,6 +68,17 @@ function getLocalDateString(date = new Date()) {
 
 const today = getLocalDateString();
 
+function safeParseArray<T>(value: string | null): T[] {
+  if (!value) return [];
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 function loadGoals(): Goals {
   const saved = localStorage.getItem(storageKeys.goals);
 
@@ -119,17 +130,6 @@ function shiftDate(dateString: string, days: number) {
   date.setDate(date.getDate() + days);
 
   return getLocalDateString(date);
-}
-
-function safeParseArray<T>(value: string | null): T[] {
-  if (!value) return [];
-
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
 }
 
 function normalizeDailyLog(raw: Record<string, unknown>): DailyLog {
@@ -286,7 +286,14 @@ function getWorkoutScore(minutes: number) {
   return 0;
 }
 
-function getCoachPlan({
+function getRiskLevel(score: number) {
+  if (score >= 80) return "Low Risk";
+  if (score >= 60) return "Medium Risk";
+  if (score >= 40) return "High Risk";
+  return "Very High Risk";
+}
+
+function getMainProblem({
   dailyLog,
   totalProtein,
   workoutMinutes,
@@ -303,64 +310,60 @@ function getCoachPlan({
 }) {
   if (!dailyLog) {
     return {
-      priority: "Start with Daily Check-in.",
-      why: "Coach needs your baseline first: weight, sleep, water, snack level, and mood. Without this, the app can only guess.",
-      nextAction: "Go to Dashboard and save today’s check-in first. After that, log your first meal in Food.",
+      title: "No baseline yet",
+      detail:
+        "ยังไม่มี Daily Check-in วันนี้ เลยยังวิเคราะห์จริงไม่ได้ ต้องมีน้ำหนัก นอน น้ำ mood และ snack level ก่อน",
     };
   }
 
   if (dailyLog.sleep > 0 && dailyLog.sleep < goals.sleepGoal - 1) {
     return {
-      priority: "Recover first. Sleep is the main issue today.",
-      why: `Your sleep goal is ${goals.sleepGoal}h. Low sleep increases cravings and makes training feel worse.`,
-      nextAction:
-        "Keep workout light today. Hit water, protein, and try to sleep earlier tonight.",
+      title: "Sleep debt is driving the day",
+      detail:
+        "วันนี้ความเสี่ยงหลักคือการนอนน้อย เพราะมันทำให้หิวบ่อย อยากหวานง่าย และทำให้แรงซ้อมตก",
     };
   }
 
   if (dailyLog.water < goals.waterGoal) {
     return {
-      priority: "Drink water before judging hunger.",
-      why: `Your water goal is ${goals.waterGoal}L. When water is low, hunger and cravings can feel stronger than they actually are.`,
-      nextAction: `Push water to at least ${goals.waterGoal}L today. Then decide if you still need more food.`,
+      title: "Water is too low",
+      detail:
+        "น้ำยังต่ำกว่าเป้า ก่อนจะตัดสินว่าหิวจริงหรืออยากกินเล่น ควรดันน้ำให้ถึงเป้าก่อน",
     };
   }
 
   if (totalProtein < goals.proteinGoal * 0.65) {
     return {
-      priority: "Protein is too low.",
-      why: `Your protein goal is ${goals.proteinGoal}g. If protein stays low while cutting weight, you risk looking flat and losing muscle.`,
-      nextAction:
-        "Add one protein-focused item: whey, chicken, eggs, tuna, Greek yogurt, or lean pork.",
+      title: "Protein is too low",
+      detail:
+        "โปรตีนยังต่ำ ถ้าลดน้ำหนักโดยโปรตีนไม่ถึง เสี่ยงเสียกล้ามและหิวง่ายกว่าเดิม",
     };
   }
 
   if (workoutMinutes === 0) {
     return {
-      priority: "Move today.",
-      why: "You do not need a perfect workout. You just need to keep the system active.",
-      nextAction:
-        "Do badminton, walk 30 minutes, or Home Workout 15 minutes: push-ups, squats, plank.",
+      title: "No movement yet",
+      detail:
+        "วันนี้ยังไม่มี movement เลย ไม่ต้องซ้อมหนักก็ได้ แต่ควรมีอย่างน้อยเดินหรือ home workout สั้น ๆ",
     };
   }
 
   if (sweetDrinkCount > 0 || junkCount > 0) {
     return {
-      priority: "Clean up the next meal.",
-      why: "One sweet drink or junk meal does not ruin the day. The problem is letting it turn into a full-day spiral.",
-      nextAction:
-        "Next meal: protein first, no sweet drink, no extra snack. Do not starve.",
+      title: "Food quality risk",
+      detail:
+        "วันนี้มีน้ำหวานหรือ junk แล้ว จุดสำคัญคืออย่าปล่อยให้มื้อต่อไปหลุดต่อเป็น chain",
     };
   }
 
   return {
-    priority: "Good day. Maintain the system.",
-    why: "Baseline, food, and movement are under control. This is the kind of boring day that creates results.",
-    nextAction: "Do not add random snacks. Finish water and sleep on time.",
+    title: "System is stable",
+    detail:
+      "วันนี้ภาพรวมดี ไม่มีปัญหาหลักชัด ๆ ให้ทำต่อแบบนิ่ง ๆ และอย่าเติม snack แบบไม่จำเป็น",
   };
 }
 
-function getMissionList({
+function getStrategy({
   dailyLog,
   totalProtein,
   workoutMinutes,
@@ -375,27 +378,113 @@ function getMissionList({
   junkCount: number;
   goals: Goals;
 }) {
-  const missions: string[] = [];
+  const proteinLeft = Math.max(goals.proteinGoal - totalProtein, 0);
 
-  if (!dailyLog) missions.push("Save Daily Check-in");
-  if (dailyLog && dailyLog.water < goals.waterGoal) {
-    missions.push(`Drink water to ${goals.waterGoal}L`);
+  if (!dailyLog) {
+    return "เริ่มจากไปหน้า Dashboard แล้วบันทึก Daily Check-in ก่อน จากนั้นกลับมาดู Coach ใหม่";
   }
+
+  if (dailyLog.sleep < goals.sleepGoal - 1) {
+    return "วันนี้ใช้ strategy แบบ recovery cut: โปรตีนให้ถึง น้ำให้ถึง workout เบา ๆ และห้ามอดจนหิวหนักตอนดึก";
+  }
+
+  if (dailyLog.water < goals.waterGoal) {
+    return `ดื่มน้ำเพิ่มให้ถึง ${goals.waterGoal}L ก่อน แล้วค่อยประเมินความหิวอีกที`;
+  }
+
+  if (proteinLeft > 0) {
+    return `เติมโปรตีนอีกประมาณ ${Math.round(
+      proteinLeft
+    )}g ด้วยของง่าย เช่น whey, ไก่, ไข่, ทูน่า, หมูไม่ติดมัน`;
+  }
+
+  if (workoutMinutes === 0) {
+    return "เลือก movement ที่ friction ต่ำที่สุด: เดิน 30 นาที หรือ home workout 15 นาที ไม่ต้องรอ mood";
+  }
+
+  if (sweetDrinkCount > 0 || junkCount > 0) {
+    return "มื้อต่อไปให้เป็น reset meal: โปรตีนสูง น้ำเปล่า/zero และไม่ต้องกินชดเชยแบบอดข้าว";
+  }
+
+  return "ทำแบบเดิมต่อ ไม่ต้องเพิ่มความโหด แค่ปิดวันให้สะอาดและนอนให้ถึงเป้า";
+}
+
+function getAvoidList({
+  dailyLog,
+  totalProtein,
+  sweetDrinkCount,
+  junkCount,
+  goals,
+}: {
+  dailyLog?: DailyLog;
+  totalProtein: number;
+  sweetDrinkCount: number;
+  junkCount: number;
+  goals: Goals;
+}) {
+  const avoid = [];
+
+  if (!dailyLog) {
+    avoid.push("อย่าเดาสุ่มว่าพังหรือดี จนกว่าจะ log baseline");
+  }
+
   if (dailyLog && dailyLog.sleep < goals.sleepGoal - 1) {
-    missions.push("Sleep earlier tonight");
+    avoid.push("อย่าซ้อมหนักเพื่อชดเชยนอนน้อย");
+    avoid.push("อย่าปล่อยให้หิวจัดตอนดึก");
   }
+
+  if (dailyLog && dailyLog.water < goals.waterGoal) {
+    avoid.push("อย่ากินขนมเพราะคิดว่าหิว ทั้งที่น้ำยังไม่ถึง");
+  }
+
   if (totalProtein < goals.proteinGoal) {
-    missions.push(`Add ${Math.round(goals.proteinGoal - totalProtein)}g protein`);
-  }
-  if (workoutMinutes === 0) missions.push("Log one workout or walk");
-  if (sweetDrinkCount > 0) missions.push("No more sweet drink today");
-  if (junkCount > 0) missions.push("Next meal must be cleaner");
-
-  if (missions.length === 0) {
-    return ["Maintain today. Do not add random snacks."];
+    avoid.push("อย่าใช้มื้อคาร์บล้วนเป็นมื้อหลัก");
   }
 
-  return missions.slice(0, 4);
+  if (sweetDrinkCount > 0) {
+    avoid.push("อย่าเติมน้ำหวานแก้วที่สอง");
+  }
+
+  if (junkCount > 0) {
+    avoid.push("อย่าคิดว่าเพราะหลุดแล้ววันนี้พังหมด");
+  }
+
+  if (avoid.length === 0) {
+    avoid.push("อย่าเพิ่ม snack แบบไม่ได้หิวจริง");
+    avoid.push("อย่านอนดึกเพราะวันนี้ทำดีแล้ว");
+  }
+
+  return avoid.slice(0, 4);
+}
+
+function getTomorrowAdjustment({
+  dailyLog,
+  totalProtein,
+  workoutMinutes,
+  goals,
+}: {
+  dailyLog?: DailyLog;
+  totalProtein: number;
+  workoutMinutes: number;
+  goals: Goals;
+}) {
+  if (!dailyLog) {
+    return "พรุ่งนี้ให้เริ่มวันด้วย Daily Check-in เพื่อให้ระบบมีข้อมูลตั้งแต่เช้า";
+  }
+
+  if (dailyLog.sleep < goals.sleepGoal - 1) {
+    return "พรุ่งนี้อย่าเพิ่ม workout หนัก ให้แก้ที่เวลานอนก่อน";
+  }
+
+  if (totalProtein < goals.proteinGoal * 0.65) {
+    return "พรุ่งนี้วางโปรตีนตั้งแต่มื้อแรก อย่ารอให้ถึงเย็นแล้วค่อยไล่โปรตีน";
+  }
+
+  if (workoutMinutes === 0) {
+    return "พรุ่งนี้ล็อก movement ไว้ก่อน เช่น เดินหลังอาหาร หรือ home workout ก่อนอาบน้ำ";
+  }
+
+  return "พรุ่งนี้ทำ pattern เดิมซ้ำ: protein first, water early, movement ไม่ต้องรอ motivation";
 }
 
 export default function CoachPage() {
@@ -458,7 +547,7 @@ export default function CoachPage() {
     baselineScore * 0.4 + proteinScore * 0.35 + workoutScore * 0.25
   );
 
-  const coachPlan = getCoachPlan({
+  const mainProblem = getMainProblem({
     dailyLog,
     totalProtein,
     workoutMinutes,
@@ -467,12 +556,27 @@ export default function CoachPage() {
     goals,
   });
 
-  const missions = getMissionList({
+  const strategy = getStrategy({
     dailyLog,
     totalProtein,
     workoutMinutes,
     sweetDrinkCount,
     junkCount,
+    goals,
+  });
+
+  const avoidList = getAvoidList({
+    dailyLog,
+    totalProtein,
+    sweetDrinkCount,
+    junkCount,
+    goals,
+  });
+
+  const tomorrowAdjustment = getTomorrowAdjustment({
+    dailyLog,
+    totalProtein,
+    workoutMinutes,
     goals,
   });
 
@@ -489,12 +593,12 @@ export default function CoachPage() {
             <h1 className="mt-2 text-3xl font-black tracking-tight md:text-6xl">
               Coach.
               <br />
-              Decide the next move.
+              Read the system.
             </h1>
           </div>
 
           <div className="rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-zinc-300">
-            Coach / v1.4
+            Coach / v2.0
           </div>
         </nav>
 
@@ -550,13 +654,17 @@ export default function CoachPage() {
           </div>
         </section>
 
-        <section className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+        <section className="grid gap-5 xl:grid-cols-[0.85fr_1.15fr]">
           <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-6 md:p-8">
-            <p className="text-sm text-zinc-400">Today Score</p>
+            <p className="text-sm text-zinc-400">System Score</p>
 
             <p className="mt-3 text-7xl font-black tracking-tight md:text-8xl">
               {overallScore}
               <span className="ml-2 text-3xl text-zinc-500">/100</span>
+            </p>
+
+            <p className="mt-4 text-sm font-bold text-emerald-300">
+              {getRiskLevel(overallScore)}
             </p>
 
             <div className="mt-5 h-3 overflow-hidden rounded-full bg-zinc-800">
@@ -566,68 +674,82 @@ export default function CoachPage() {
               />
             </div>
 
-            <p className="mt-5 text-sm leading-6 text-zinc-300">
-              {coachPlan.priority}
-            </p>
+            <div className="mt-5 grid gap-3">
+              <ScoreRow label="Baseline" value={baselineScore} />
+              <ScoreRow label="Protein" value={proteinScore} />
+              <ScoreRow label="Workout" value={workoutScore} />
+            </div>
           </div>
 
           <div className="rounded-3xl border border-emerald-400/30 bg-emerald-400/10 p-5 md:p-6">
-            <p className="text-sm text-emerald-300">Coach Decision</p>
-            <h2 className="mt-1 text-3xl font-black">{coachPlan.priority}</h2>
+            <p className="text-sm text-emerald-300">Main Problem</p>
+            <h2 className="mt-1 text-3xl font-black">{mainProblem.title}</h2>
 
-            <div className="mt-5 grid gap-3">
-              <CoachBox label="Why this matters" text={coachPlan.why} />
-              <CoachBox label="Next action" text={coachPlan.nextAction} />
+            <p className="mt-4 text-sm leading-6 text-zinc-200">
+              {mainProblem.detail}
+            </p>
+
+            <div className="mt-5 rounded-3xl bg-zinc-950 p-5">
+              <p className="text-xs uppercase tracking-[0.25em] text-emerald-400">
+                Recommended Strategy
+              </p>
+              <p className="mt-3 text-sm leading-6 text-zinc-200">{strategy}</p>
             </div>
           </div>
         </section>
 
-        <section className="mt-5 grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
-          <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
-            <p className="text-sm text-zinc-400">Today Missions</p>
-            <h2 className="mt-1 text-2xl font-bold">{formatDateForMenu(selectedDate)}</h2>
-
-            <div className="mt-5 grid gap-3">
-              {missions.map((mission) => (
+        <section className="mt-5 grid gap-5 xl:grid-cols-3">
+          <InsightCard
+            title="What to avoid"
+            subtitle="กันไม่ให้วันหลุดไหลยาว"
+          >
+            <div className="grid gap-3">
+              {avoidList.map((item) => (
                 <div
-                  key={mission}
-                  className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4 text-sm font-bold text-zinc-200"
+                  key={item}
+                  className="rounded-2xl border border-red-900/40 bg-red-950/20 p-4 text-sm text-red-100"
                 >
-                  {mission}
+                  {item}
                 </div>
               ))}
             </div>
-          </div>
+          </InsightCard>
 
-          <div className="grid gap-3 md:grid-cols-3">
-            <SummaryCard
-              label="Baseline"
-              value={`${baselineScore}/100`}
-              note={
-                dailyLog
-                  ? `${dailyLog.weight || "-"} kg · ${dailyLog.sleep || 0}/${goals.sleepGoal}h sleep · ${
-                      dailyLog.water || 0
-                    }/${goals.waterGoal}L water`
-                  : "No daily check-in"
-              }
-            />
+          <InsightCard title="Tomorrow adjustment" subtitle="ปรับพรุ่งนี้ให้ดีขึ้น">
+            <p className="rounded-2xl bg-zinc-950 p-4 text-sm leading-6 text-zinc-300">
+              {tomorrowAdjustment}
+            </p>
+          </InsightCard>
 
-            <SummaryCard
-              label="Food"
-              value={`${totalProtein}g`}
-              note={`Goal ${goals.proteinGoal}g · ${proteinLeft}g left`}
-            />
-
-            <SummaryCard
-              label="Workout"
-              value={`${workoutMinutes} min`}
-              note={`${selectedWorkoutLogs.length} logs`}
-            />
-          </div>
+          <InsightCard title="Current numbers" subtitle="อ่านสถานะวันนี้">
+            <div className="grid gap-3">
+              <NumberRow
+                label="Weight"
+                value={dailyLog && dailyLog.weight ? `${dailyLog.weight} kg` : "-"}
+              />
+              <NumberRow
+                label="Protein"
+                value={`${totalProtein}g / ${goals.proteinGoal}g`}
+              />
+              <NumberRow
+                label="Protein Left"
+                value={`${Math.round(proteinLeft)}g`}
+              />
+              <NumberRow
+                label="Water"
+                value={
+                  dailyLog
+                    ? `${dailyLog.water}L / ${goals.waterGoal}L`
+                    : `- / ${goals.waterGoal}L`
+                }
+              />
+              <NumberRow label="Workout" value={`${workoutMinutes} min`} />
+            </div>
+          </InsightCard>
         </section>
 
         <section className="mt-5 grid gap-5 xl:grid-cols-2">
-          <DetailPanel title="Food Today">
+          <DetailPanel title="Food signals">
             {selectedFoodLogs.length === 0 ? (
               <EmptyText text="No food logs for this date" />
             ) : (
@@ -646,7 +768,7 @@ export default function CoachPage() {
             )}
           </DetailPanel>
 
-          <DetailPanel title="Workout Today">
+          <DetailPanel title="Workout signals">
             {selectedWorkoutLogs.length === 0 ? (
               <EmptyText text="No workout logs for this date" />
             ) : (
@@ -670,31 +792,47 @@ export default function CoachPage() {
   );
 }
 
-function CoachBox({ label, text }: { label: string; text: string }) {
+function ScoreRow({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-2xl bg-zinc-950 p-4">
-      <p className="text-xs uppercase tracking-[0.2em] text-emerald-400">
-        {label}
-      </p>
-      <p className="mt-2 text-sm leading-6 text-zinc-200">{text}</p>
+    <div>
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-zinc-500">{label}</span>
+        <span className="font-bold text-zinc-300">{value}/100</span>
+      </div>
+
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-zinc-800">
+        <div
+          className="h-full rounded-full bg-emerald-400"
+          style={{ width: `${value}%` }}
+        />
+      </div>
     </div>
   );
 }
 
-function SummaryCard({
-  label,
-  value,
-  note,
+function InsightCard({
+  title,
+  subtitle,
+  children,
 }: {
-  label: string;
-  value: string;
-  note: string;
+  title: string;
+  subtitle: string;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5">
-      <p className="text-sm text-zinc-400">{label}</p>
-      <p className="mt-3 text-4xl font-black">{value}</p>
-      <p className="mt-2 text-sm leading-6 text-zinc-500">{note}</p>
+    <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
+      <p className="text-sm text-zinc-400">{subtitle}</p>
+      <h2 className="mt-1 text-2xl font-bold">{title}</h2>
+      <div className="mt-5">{children}</div>
+    </div>
+  );
+}
+
+function NumberRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-2xl bg-zinc-950 p-4 text-sm">
+      <span className="text-zinc-500">{label}</span>
+      <span className="font-bold text-zinc-200">{value}</span>
     </div>
   );
 }
@@ -708,7 +846,7 @@ function DetailPanel({
 }) {
   return (
     <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
-      <p className="text-sm text-zinc-400">Details</p>
+      <p className="text-sm text-zinc-400">Signals</p>
       <h2 className="mt-1 text-2xl font-bold">{title}</h2>
       <div className="mt-5 grid gap-3">{children}</div>
     </div>

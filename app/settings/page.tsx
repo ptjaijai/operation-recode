@@ -7,14 +7,30 @@ const storageKeys = {
   daily: "operation-recode-logs-no-waist",
   food: "operation-recode-food-logs",
   workout: "operation-recode-workout-logs",
+  goals: "operation-recode-goals",
+};
+
+type Goals = {
+  targetWeight: number;
+  proteinGoal: number;
+  waterGoal: number;
+  sleepGoal: number;
 };
 
 type BackupData = {
   version: string;
   exportedAt: string;
+  goals: Goals;
   daily: unknown[];
   food: unknown[];
   workout: unknown[];
+};
+
+const defaultGoals: Goals = {
+  targetWeight: 60,
+  proteinGoal: 120,
+  waterGoal: 2,
+  sleepGoal: 7,
 };
 
 function safeParseArray(value: string | null) {
@@ -28,10 +44,42 @@ function safeParseArray(value: string | null) {
   }
 }
 
+function loadGoals(): Goals {
+  const saved = localStorage.getItem(storageKeys.goals);
+
+  if (!saved) return defaultGoals;
+
+  try {
+    const parsed = JSON.parse(saved) as Partial<Goals>;
+
+    return {
+      targetWeight:
+        typeof parsed.targetWeight === "number"
+          ? parsed.targetWeight
+          : defaultGoals.targetWeight,
+      proteinGoal:
+        typeof parsed.proteinGoal === "number"
+          ? parsed.proteinGoal
+          : defaultGoals.proteinGoal,
+      waterGoal:
+        typeof parsed.waterGoal === "number"
+          ? parsed.waterGoal
+          : defaultGoals.waterGoal,
+      sleepGoal:
+        typeof parsed.sleepGoal === "number"
+          ? parsed.sleepGoal
+          : defaultGoals.sleepGoal,
+    };
+  } catch {
+    return defaultGoals;
+  }
+}
+
 function createBackup(): BackupData {
   return {
-    version: "operation-recode-backup-v1",
+    version: "operation-recode-backup-v2",
     exportedAt: new Date().toISOString(),
+    goals: loadGoals(),
     daily: safeParseArray(localStorage.getItem(storageKeys.daily)),
     food: safeParseArray(localStorage.getItem(storageKeys.food)),
     workout: safeParseArray(localStorage.getItem(storageKeys.workout)),
@@ -42,6 +90,8 @@ export default function SettingsPage() {
   const [backupText, setBackupText] = useState("");
   const [importText, setImportText] = useState("");
   const [status, setStatus] = useState("");
+  const [goals, setGoals] = useState<Goals>(defaultGoals);
+
   const [counts, setCounts] = useState({
     daily: 0,
     food: 0,
@@ -57,8 +107,20 @@ export default function SettingsPage() {
   }
 
   useEffect(() => {
+    setGoals(loadGoals());
     refreshCounts();
   }, []);
+
+  function saveGoals() {
+    localStorage.setItem(storageKeys.goals, JSON.stringify(goals));
+    setStatus("Goals saved. Other pages can now use these targets.");
+  }
+
+  function resetGoals() {
+    setGoals(defaultGoals);
+    localStorage.setItem(storageKeys.goals, JSON.stringify(defaultGoals));
+    setStatus("Goals reset to default.");
+  }
 
   function generateBackup() {
     const backup = createBackup();
@@ -125,6 +187,30 @@ export default function SettingsPage() {
       localStorage.setItem(storageKeys.food, JSON.stringify(parsed.food));
       localStorage.setItem(storageKeys.workout, JSON.stringify(parsed.workout));
 
+      if (parsed.goals) {
+        const importedGoals: Goals = {
+          targetWeight:
+            typeof parsed.goals.targetWeight === "number"
+              ? parsed.goals.targetWeight
+              : defaultGoals.targetWeight,
+          proteinGoal:
+            typeof parsed.goals.proteinGoal === "number"
+              ? parsed.goals.proteinGoal
+              : defaultGoals.proteinGoal,
+          waterGoal:
+            typeof parsed.goals.waterGoal === "number"
+              ? parsed.goals.waterGoal
+              : defaultGoals.waterGoal,
+          sleepGoal:
+            typeof parsed.goals.sleepGoal === "number"
+              ? parsed.goals.sleepGoal
+              : defaultGoals.sleepGoal,
+        };
+
+        localStorage.setItem(storageKeys.goals, JSON.stringify(importedGoals));
+        setGoals(importedGoals);
+      }
+
       refreshCounts();
       setStatus("Backup imported. Refresh the app pages to see restored data.");
     } catch {
@@ -146,7 +232,7 @@ export default function SettingsPage() {
     setBackupText("");
     setImportText("");
     refreshCounts();
-    setStatus("All local data cleared.");
+    setStatus("All local data cleared. Goals were not deleted.");
   }
 
   return (
@@ -162,16 +248,85 @@ export default function SettingsPage() {
             <h1 className="mt-2 text-3xl font-black tracking-tight md:text-6xl">
               Settings.
               <br />
-              Protect the data.
+              Control the system.
             </h1>
           </div>
 
           <div className="rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-zinc-300">
-            Settings / v0.1
+            Settings / v0.2
           </div>
         </nav>
 
-        <section className="grid gap-5 md:grid-cols-3">
+        <section className="grid gap-5 md:grid-cols-4">
+          <StatCard label="Target Weight" value={`${goals.targetWeight} kg`} />
+          <StatCard label="Protein Goal" value={`${goals.proteinGoal}g`} />
+          <StatCard label="Water Goal" value={`${goals.waterGoal}L`} />
+          <StatCard label="Sleep Goal" value={`${goals.sleepGoal}h`} />
+        </section>
+
+        <section className="mt-5 rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
+          <p className="text-sm text-zinc-400">Goals</p>
+          <h2 className="mt-1 text-2xl font-bold">Set your targets</h2>
+
+          <div className="mt-5 grid gap-3 md:grid-cols-4">
+            <Input
+              label="Target Weight (kg)"
+              type="number"
+              step="0.1"
+              value={String(goals.targetWeight)}
+              onChange={(value) =>
+                setGoals({ ...goals, targetWeight: Number(value) })
+              }
+            />
+
+            <Input
+              label="Protein Goal (g)"
+              type="number"
+              value={String(goals.proteinGoal)}
+              onChange={(value) =>
+                setGoals({ ...goals, proteinGoal: Number(value) })
+              }
+            />
+
+            <Input
+              label="Water Goal (L)"
+              type="number"
+              step="0.1"
+              value={String(goals.waterGoal)}
+              onChange={(value) =>
+                setGoals({ ...goals, waterGoal: Number(value) })
+              }
+            />
+
+            <Input
+              label="Sleep Goal (hours)"
+              type="number"
+              step="0.1"
+              value={String(goals.sleepGoal)}
+              onChange={(value) =>
+                setGoals({ ...goals, sleepGoal: Number(value) })
+              }
+            />
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <button
+              onClick={saveGoals}
+              className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-black text-zinc-950 hover:bg-emerald-300"
+            >
+              Save Goals
+            </button>
+
+            <button
+              onClick={resetGoals}
+              className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-200 hover:bg-zinc-800"
+            >
+              Reset Default Goals
+            </button>
+          </div>
+        </section>
+
+        <section className="mt-5 grid gap-5 md:grid-cols-3">
           <StatCard label="Daily Logs" value={String(counts.daily)} />
           <StatCard label="Food Logs" value={String(counts.food)} />
           <StatCard label="Workout Logs" value={String(counts.workout)} />
@@ -266,5 +421,32 @@ function StatCard({ label, value }: { label: string; value: string }) {
       <p className="text-sm text-zinc-400">{label}</p>
       <p className="mt-3 text-4xl font-black">{value}</p>
     </div>
+  );
+}
+
+function Input({
+  label,
+  type,
+  value,
+  onChange,
+  step,
+}: {
+  label: string;
+  type: string;
+  value: string;
+  onChange: (value: string) => void;
+  step?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="text-xs text-zinc-500">{label}</span>
+      <input
+        type={type}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-1 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
+      />
+    </label>
   );
 }

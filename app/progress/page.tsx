@@ -26,6 +26,27 @@ type WorkoutLog = {
   durationMinutes: number;
 };
 
+type Goals = {
+  targetWeight: number;
+  proteinGoal: number;
+  waterGoal: number;
+  sleepGoal: number;
+};
+
+const storageKeys = {
+  daily: "operation-recode-logs-no-waist",
+  food: "operation-recode-food-logs",
+  workout: "operation-recode-workout-logs",
+  goals: "operation-recode-goals",
+};
+
+const defaultGoals: Goals = {
+  targetWeight: 60,
+  proteinGoal: 120,
+  waterGoal: 2,
+  sleepGoal: 7,
+};
+
 function getLocalDateString(date = new Date()) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -44,6 +65,37 @@ function safeParseArray<T>(value: string | null): T[] {
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
+  }
+}
+
+function loadGoals(): Goals {
+  const saved = localStorage.getItem(storageKeys.goals);
+
+  if (!saved) return defaultGoals;
+
+  try {
+    const parsed = JSON.parse(saved) as Partial<Goals>;
+
+    return {
+      targetWeight:
+        typeof parsed.targetWeight === "number"
+          ? parsed.targetWeight
+          : defaultGoals.targetWeight,
+      proteinGoal:
+        typeof parsed.proteinGoal === "number"
+          ? parsed.proteinGoal
+          : defaultGoals.proteinGoal,
+      waterGoal:
+        typeof parsed.waterGoal === "number"
+          ? parsed.waterGoal
+          : defaultGoals.waterGoal,
+      sleepGoal:
+        typeof parsed.sleepGoal === "number"
+          ? parsed.sleepGoal
+          : defaultGoals.sleepGoal,
+    };
+  } catch {
+    return defaultGoals;
   }
 }
 
@@ -121,18 +173,18 @@ function formatDate(dateString: string) {
   });
 }
 
-function getSleepScore(sleep: number) {
-  if (sleep >= 7) return 100;
-  if (sleep >= 6) return 75;
-  if (sleep >= 5) return 45;
+function getSleepScore(sleep: number, sleepGoal: number) {
+  if (sleep >= sleepGoal) return 100;
+  if (sleep >= sleepGoal - 1) return 75;
+  if (sleep >= sleepGoal - 2) return 45;
   if (sleep > 0) return 25;
   return 0;
 }
 
-function getWaterScore(water: number) {
-  if (water >= 2.5) return 100;
-  if (water >= 2) return 80;
-  if (water >= 1.5) return 60;
+function getWaterScore(water: number, waterGoal: number) {
+  if (water >= waterGoal) return 100;
+  if (water >= waterGoal * 0.8) return 80;
+  if (water >= waterGoal * 0.6) return 60;
   if (water > 0) return 30;
   return 0;
 }
@@ -152,40 +204,74 @@ function getMoodScore(mood: DailyLog["mood"]) {
   return 20;
 }
 
-function getDailyScore(log: DailyLog) {
+function getDailyScore(log: DailyLog, goals: Goals) {
   return Math.round(
-    getSleepScore(log.sleep) * 0.35 +
-      getWaterScore(log.water) * 0.3 +
+    getSleepScore(log.sleep, goals.sleepGoal) * 0.35 +
+      getWaterScore(log.water, goals.waterGoal) * 0.3 +
       getSnackScore(log.snackLevel) * 0.25 +
       getMoodScore(log.mood) * 0.1
   );
 }
 
-function getTrendText(change: number) {
-  if (change < -0.5) return "Trend is good. Weight is moving down.";
-  if (change > 0.5) return "Weight is moving up. Check snacks, sweet drinks, and late-night eating.";
-  if (change !== 0) return "Weight is mostly stable. Keep collecting data.";
-  return "Not enough weight data yet.";
+function getTrendText({
+  latestWeight,
+  firstWeight,
+  targetWeight,
+}: {
+  latestWeight: number;
+  firstWeight: number;
+  targetWeight: number;
+}) {
+  if (!latestWeight || !firstWeight) {
+    return "Not enough weight data yet. Start by saving weight in Daily Check-in.";
+  }
+
+  const change = latestWeight - firstWeight;
+  const left = latestWeight - targetWeight;
+
+  if (latestWeight <= targetWeight) {
+    return "Target reached. Now focus on maintaining, protein, and strength.";
+  }
+
+  if (change < -0.5) {
+    return `${Math.abs(change).toFixed(
+      1
+    )} kg down from first log. Good trend. About ${left.toFixed(
+      1
+    )} kg left to target.`;
+  }
+
+  if (change > 0.5) {
+    return `${change.toFixed(
+      1
+    )} kg up from first log. Check snacks, sweet drinks, late-night eating, and weekend meals.`;
+  }
+
+  return `Weight is mostly stable. About ${left.toFixed(
+    1
+  )} kg left to target. Keep collecting data.`;
 }
 
 export default function ProgressPage() {
   const [dailyLogs, setDailyLogs] = useState<DailyLog[]>([]);
   const [foodLogs, setFoodLogs] = useState<FoodLog[]>([]);
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([]);
+  const [goals, setGoals] = useState<Goals>(defaultGoals);
 
   useEffect(() => {
     const savedDaily = safeParseArray<Record<string, unknown>>(
-      localStorage.getItem("operation-recode-logs-no-waist")
+      localStorage.getItem(storageKeys.daily)
     );
 
     const savedFood = safeParseArray<Record<string, unknown>>(
-      localStorage.getItem("operation-recode-food-logs")
+      localStorage.getItem(storageKeys.food)
     );
 
     const savedWorkout = safeParseArray<Record<string, unknown>>(
-      localStorage.getItem("operation-recode-workout-logs")
+      localStorage.getItem(storageKeys.workout)
     );
 
+    setGoals(loadGoals());
     setDailyLogs(savedDaily.map((item) => normalizeDailyLog(item)));
     setFoodLogs(savedFood.map((item) => normalizeFoodLog(item)));
     setWorkoutLogs(savedWorkout.map((item) => normalizeWorkoutLog(item)));
@@ -201,6 +287,7 @@ export default function ProgressPage() {
   const latestWeight = weightLogs[weightLogs.length - 1]?.weight ?? 0;
   const firstWeight = weightLogs[0]?.weight ?? 0;
   const weightChange = latestWeight && firstWeight ? latestWeight - firstWeight : 0;
+  const weightLeft = latestWeight ? Math.max(latestWeight - goals.targetWeight, 0) : 0;
 
   const last7Weights = weightLogs.slice(-7);
   const avg7 =
@@ -264,39 +351,57 @@ export default function ProgressPage() {
           </div>
 
           <div className="rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-zinc-300">
-            Progress / v0.1
+            Progress / v0.3
           </div>
         </nav>
 
-        <section className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+        <section className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
           <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-6 md:p-8">
-            <p className="text-sm text-zinc-400">Current Weight</p>
+            <p className="text-sm text-zinc-400">Weight Goal</p>
 
-            <p className="mt-3 text-7xl font-black tracking-tight md:text-8xl">
-              {latestWeight ? latestWeight.toFixed(1) : "-"}
-              <span className="ml-2 text-3xl text-zinc-500">kg</span>
-            </p>
+            <div className="mt-5 grid gap-4 md:grid-cols-3">
+              <BigGoalCard
+                label="Current"
+                value={latestWeight ? latestWeight.toFixed(1) : "-"}
+                unit="kg"
+                note="latest log"
+              />
 
-            <p className="mt-4 text-sm leading-6 text-zinc-400">
-              Target: 60 kg ·{" "}
-              {weightChange
-                ? `${weightChange > 0 ? "+" : ""}${weightChange.toFixed(
-                    1
-                  )} kg from first log`
-                : "waiting for more data"}
-            </p>
+              <BigGoalCard
+                label="Target"
+                value={goals.targetWeight.toFixed(1)}
+                unit="kg"
+                note="from settings"
+                highlight
+              />
+
+              <BigGoalCard
+                label="To Go"
+                value={latestWeight ? weightLeft.toFixed(1) : "-"}
+                unit="kg"
+                note={latestWeight ? "left to target" : "waiting for data"}
+              />
+            </div>
 
             <div className="mt-5 rounded-3xl bg-zinc-950 p-5">
               <p className="text-sm text-zinc-500">Trend comment</p>
               <p className="mt-2 text-sm leading-6 text-zinc-300">
-                {getTrendText(weightChange)}
+                {getTrendText({
+                  latestWeight,
+                  firstWeight,
+                  targetWeight: goals.targetWeight,
+                })}
               </p>
             </div>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-1">
+          <div className="grid gap-3">
             <StatCard label="7-day Avg" value={avg7 ? `${avg7.toFixed(1)} kg` : "-"} />
-            <StatCard label="Avg Protein" value={`${avgProtein}g`} />
+            <StatCard
+              label="Avg Protein"
+              value={`${avgProtein}g`}
+              note={`Goal ${goals.proteinGoal}g`}
+            />
             <StatCard label="Workout / 7 days" value={`${weeklyWorkoutMinutes} min`} />
           </div>
         </section>
@@ -346,7 +451,7 @@ export default function ProgressPage() {
               <EmptyText text="No daily check-ins yet" />
             ) : (
               last14Daily.map((log) => {
-                const score = getDailyScore(log);
+                const score = getDailyScore(log, goals);
 
                 return (
                   <div
@@ -375,11 +480,55 @@ export default function ProgressPage() {
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
+function BigGoalCard({
+  label,
+  value,
+  unit,
+  note,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  unit: string;
+  note: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div
+      className={
+        highlight
+          ? "rounded-3xl border border-emerald-400/50 bg-emerald-400/10 p-5"
+          : "rounded-3xl border border-zinc-800 bg-zinc-950 p-5"
+      }
+    >
+      <p className={highlight ? "text-sm text-emerald-300" : "text-sm text-zinc-500"}>
+        {label}
+      </p>
+
+      <p className="mt-3 text-5xl font-black tracking-tight md:text-6xl">
+        {value}
+        <span className="ml-1 text-xl text-zinc-500">{unit}</span>
+      </p>
+
+      <p className="mt-3 text-sm text-zinc-500">{note}</p>
+    </div>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  note,
+}: {
+  label: string;
+  value: string;
+  note?: string;
+}) {
   return (
     <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5">
       <p className="text-sm text-zinc-400">{label}</p>
       <p className="mt-3 text-4xl font-black">{value}</p>
+      {note && <p className="mt-2 text-sm text-zinc-500">{note}</p>}
     </div>
   );
 }

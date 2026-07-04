@@ -7,6 +7,7 @@ const links = [
   { href: "/food", label: "Food" },
   { href: "/workout", label: "Workout" },
   { href: "/coach", label: "Coach" },
+  { href: "/progress", label: "Progress" },
 ];
 
 export default function AppNav() {

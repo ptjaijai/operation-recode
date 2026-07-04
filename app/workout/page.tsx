@@ -63,7 +63,15 @@ type WorkoutLog = {
   notes: string;
 };
 
-const today = new Date().toISOString().slice(0, 10);
+function getLocalDateString(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+const today = getLocalDateString();
 
 function getWorkoutLabel(type: WorkoutType) {
   if (type === "badminton") return "Badminton";
@@ -455,7 +463,10 @@ export default function WorkoutPage() {
   const totalGames = todayLogs.reduce((sum, log) => sum + (log.gamesPlayed ?? 0), 0);
   const totalSteps = todayLogs.reduce((sum, log) => sum + (log.steps ?? 0), 0);
   const totalDistance = todayLogs.reduce((sum, log) => sum + (log.distanceKm ?? 0), 0);
-  const totalSwimMeters = todayLogs.reduce((sum, log) => sum + (log.swimmingMeters ?? 0), 0);
+  const totalSwimMeters = todayLogs.reduce(
+    (sum, log) => sum + (log.swimmingMeters ?? 0),
+    0
+  );
 
   const totalPushups = todayLogs.reduce(
     (sum, log) => sum + getExerciseTotal(log.pushupSets, log.pushupReps),
@@ -585,7 +596,7 @@ export default function WorkoutPage() {
           </div>
 
           <div className="rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-zinc-300">
-            Training / v0.10
+            Training / v0.11
           </div>
         </nav>
 
@@ -918,7 +929,7 @@ export default function WorkoutPage() {
               />
               <StatCard
                 label="Strength"
-                value={`${totalPushups}/${totalSquats}/${totalLunges}/${totalPlankMinutes.toFixed(
+                value={`${totalPushups} / ${totalSquats} / ${totalLunges} / ${totalPlankMinutes.toFixed(
                   1
                 )}m`}
                 note="PU / SQ / LG / Plank"
@@ -993,10 +1004,10 @@ function StatCard({
   note: string;
 }) {
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+    <div className="min-w-0 rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
       <p className="text-xs text-zinc-500">{label}</p>
-      <p className="mt-3 text-3xl font-bold">{value}</p>
-      <p className="mt-2 text-xs text-zinc-500">{note}</p>
+      <p className="mt-3 break-words text-2xl font-bold leading-tight">{value}</p>
+      <p className="mt-2 text-xs leading-5 text-zinc-500">{note}</p>
     </div>
   );
 }

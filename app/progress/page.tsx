@@ -18,6 +18,8 @@ type FoodLog = {
   id: string;
   date: string;
   protein: number;
+  sweetDrink?: boolean;
+  junkFood?: boolean;
 };
 
 type WorkoutLog = {
@@ -152,6 +154,18 @@ function normalizeFoodLog(raw: Record<string, unknown>): FoodLog {
         : typeof raw.proteinEstimate === "number"
         ? raw.proteinEstimate
         : 0,
+    sweetDrink:
+      typeof raw.sweetDrink === "boolean"
+        ? raw.sweetDrink
+        : typeof raw.hasSweetDrink === "boolean"
+        ? raw.hasSweetDrink
+        : false,
+    junkFood:
+      typeof raw.junkFood === "boolean"
+        ? raw.junkFood
+        : typeof raw.hasJunkFood === "boolean"
+        ? raw.hasJunkFood
+        : false,
   };
 }
 
@@ -252,6 +266,48 @@ function getTrendText({
   )} kg left to target. Keep collecting data.`;
 }
 
+function getWeeklyAdvice({
+  weeklyWeightChange,
+  avgProtein,
+  proteinGoal,
+  workoutMinutes,
+  sweetDrinkCount,
+  junkCount,
+}: {
+  weeklyWeightChange: number;
+  avgProtein: number;
+  proteinGoal: number;
+  workoutMinutes: number;
+  sweetDrinkCount: number;
+  junkCount: number;
+}) {
+  if (avgProtein < proteinGoal * 0.65) {
+    return "สัปดาห์หน้าแก้ที่โปรตีนก่อน เพราะโปรตีนเฉลี่ยยังต่ำเกินไป เสี่ยงหิวและเสียกล้าม";
+  }
+
+  if (workoutMinutes < 120) {
+    return "สัปดาห์หน้าเพิ่ม movement ให้สม่ำเสมอกว่านี้ ไม่ต้องหนัก แค่ให้มีหลายวัน";
+  }
+
+  if (sweetDrinkCount > 2) {
+    return "สัปดาห์หน้าให้ลดน้ำหวานก่อน เพราะเป็นแคลอรี่ที่เข้ามาง่ายและไม่อิ่ม";
+  }
+
+  if (junkCount > 2) {
+    return "สัปดาห์หน้าอย่าปล่อย junk food ต่อเนื่อง ให้ใช้มื้อถัดไปเป็น reset meal";
+  }
+
+  if (weeklyWeightChange < -0.3) {
+    return "สัปดาห์นี้ trend ดี ทำ pattern เดิมซ้ำ อย่าเพิ่มความโหดจนหลุด";
+  }
+
+  if (weeklyWeightChange > 0.3) {
+    return "น้ำหนักสัปดาห์นี้ขึ้น ให้เช็ก snack, น้ำหวาน, มื้อดึก และวันสุดสัปดาห์";
+  }
+
+  return "สัปดาห์นี้ค่อนข้างนิ่ง ให้เก็บข้อมูลต่อ และคุมพื้นฐานให้แน่นกว่าเดิม";
+}
+
 export default function ProgressPage() {
   const [dailyLogs, setDailyLogs] = useState<DailyLog[]>([]);
   const [foodLogs, setFoodLogs] = useState<FoodLog[]>([]);
@@ -295,6 +351,11 @@ export default function ProgressPage() {
       ? last7Weights.reduce((sum, log) => sum + log.weight, 0) / last7Weights.length
       : 0;
 
+  const weeklyWeightStart = last7Weights[0]?.weight ?? 0;
+  const weeklyWeightEnd = last7Weights[last7Weights.length - 1]?.weight ?? 0;
+  const weeklyWeightChange =
+    weeklyWeightStart && weeklyWeightEnd ? weeklyWeightEnd - weeklyWeightStart : 0;
+
   const last14Daily = dailyLogs
     .slice()
     .sort((a, b) => b.date.localeCompare(a.date))
@@ -326,12 +387,35 @@ export default function ProgressPage() {
     return sum + dayMinutes;
   }, 0);
 
+  const weeklySweetDrinks = last7Dates.reduce((sum, date) => {
+    return sum + foodLogs.filter((log) => log.date === date && log.sweetDrink).length;
+  }, 0);
+
+  const weeklyJunkFood = last7Dates.reduce((sum, date) => {
+    return sum + foodLogs.filter((log) => log.date === date && log.junkFood).length;
+  }, 0);
+
   const avgProtein =
     last7Dates.length > 0 ? Math.round(weeklyProtein / last7Dates.length) : 0;
+
+  const bestDailyLog = dailyLogs
+    .slice()
+    .sort((a, b) => getDailyScore(b, goals) - getDailyScore(a, goals))[0];
+
+  const bestScore = bestDailyLog ? getDailyScore(bestDailyLog, goals) : 0;
 
   const maxWeight = Math.max(...weightLogs.map((log) => log.weight), 1);
   const minWeight = Math.min(...weightLogs.map((log) => log.weight), 0);
   const range = Math.max(maxWeight - minWeight, 1);
+
+  const weeklyAdvice = getWeeklyAdvice({
+    weeklyWeightChange,
+    avgProtein,
+    proteinGoal: goals.proteinGoal,
+    workoutMinutes: weeklyWorkoutMinutes,
+    sweetDrinkCount: weeklySweetDrinks,
+    junkCount: weeklyJunkFood,
+  });
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
@@ -351,7 +435,7 @@ export default function ProgressPage() {
           </div>
 
           <div className="rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-zinc-300">
-            Progress / v0.3
+            Progress / v0.4
           </div>
         </nav>
 
@@ -403,6 +487,46 @@ export default function ProgressPage() {
               note={`Goal ${goals.proteinGoal}g`}
             />
             <StatCard label="Workout / 7 days" value={`${weeklyWorkoutMinutes} min`} />
+          </div>
+        </section>
+
+        <section className="mt-5 rounded-3xl border border-emerald-400/30 bg-emerald-400/10 p-5 md:p-6">
+          <p className="text-sm text-emerald-300">Weekly Review</p>
+          <h2 className="mt-1 text-3xl font-black">Last 7 active days</h2>
+
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            <ReviewCard
+              label="Weight Change"
+              value={
+                weeklyWeightStart && weeklyWeightEnd
+                  ? `${weeklyWeightChange > 0 ? "+" : ""}${weeklyWeightChange.toFixed(1)} kg`
+                  : "-"
+              }
+              note={
+                weeklyWeightStart && weeklyWeightEnd
+                  ? `${weeklyWeightStart.toFixed(1)} → ${weeklyWeightEnd.toFixed(1)} kg`
+                  : "not enough data"
+              }
+            />
+
+            <ReviewCard
+              label="Best Day"
+              value={bestDailyLog ? formatDate(bestDailyLog.date) : "-"}
+              note={bestDailyLog ? `Score ${bestScore}/100` : "no check-ins yet"}
+            />
+
+            <ReviewCard
+              label="Food Quality"
+              value={`${weeklySweetDrinks + weeklyJunkFood}`}
+              note={`${weeklySweetDrinks} sweet drinks · ${weeklyJunkFood} junk`}
+            />
+          </div>
+
+          <div className="mt-5 rounded-3xl bg-zinc-950 p-5">
+            <p className="text-xs uppercase tracking-[0.25em] text-emerald-400">
+              Next week adjustment
+            </p>
+            <p className="mt-3 text-sm leading-6 text-zinc-200">{weeklyAdvice}</p>
           </div>
         </section>
 
@@ -529,6 +653,24 @@ function StatCard({
       <p className="text-sm text-zinc-400">{label}</p>
       <p className="mt-3 text-4xl font-black">{value}</p>
       {note && <p className="mt-2 text-sm text-zinc-500">{note}</p>}
+    </div>
+  );
+}
+
+function ReviewCard({
+  label,
+  value,
+  note,
+}: {
+  label: string;
+  value: string;
+  note: string;
+}) {
+  return (
+    <div className="rounded-3xl border border-emerald-400/20 bg-zinc-950/70 p-5">
+      <p className="text-sm text-emerald-300">{label}</p>
+      <p className="mt-3 text-4xl font-black">{value}</p>
+      <p className="mt-2 text-sm text-zinc-500">{note}</p>
     </div>
   );
 }

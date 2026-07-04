@@ -3,6 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import AppNav from "../AppNav";
 
+type Goals = {
+  targetWeight: number;
+  proteinGoal: number;
+  waterGoal: number;
+  sleepGoal: number;
+};
+
 type DailyLog = {
   id: string;
   date: string;
@@ -37,6 +44,20 @@ type WorkoutLog = {
   notes: string;
 };
 
+const storageKeys = {
+  daily: "operation-recode-logs-no-waist",
+  food: "operation-recode-food-logs",
+  workout: "operation-recode-workout-logs",
+  goals: "operation-recode-goals",
+};
+
+const defaultGoals: Goals = {
+  targetWeight: 60,
+  proteinGoal: 120,
+  waterGoal: 2,
+  sleepGoal: 7,
+};
+
 function getLocalDateString(date = new Date()) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -46,6 +67,37 @@ function getLocalDateString(date = new Date()) {
 }
 
 const today = getLocalDateString();
+
+function loadGoals(): Goals {
+  const saved = localStorage.getItem(storageKeys.goals);
+
+  if (!saved) return defaultGoals;
+
+  try {
+    const parsed = JSON.parse(saved) as Partial<Goals>;
+
+    return {
+      targetWeight:
+        typeof parsed.targetWeight === "number"
+          ? parsed.targetWeight
+          : defaultGoals.targetWeight,
+      proteinGoal:
+        typeof parsed.proteinGoal === "number"
+          ? parsed.proteinGoal
+          : defaultGoals.proteinGoal,
+      waterGoal:
+        typeof parsed.waterGoal === "number"
+          ? parsed.waterGoal
+          : defaultGoals.waterGoal,
+      sleepGoal:
+        typeof parsed.sleepGoal === "number"
+          ? parsed.sleepGoal
+          : defaultGoals.sleepGoal,
+    };
+  } catch {
+    return defaultGoals;
+  }
+}
 
 function formatDateForMenu(dateString: string) {
   if (!dateString) return "";
@@ -174,18 +226,18 @@ function normalizeWorkoutLog(raw: Record<string, unknown>): WorkoutLog {
   };
 }
 
-function getSleepScore(sleep: number) {
-  if (sleep >= 7) return 100;
-  if (sleep >= 6) return 75;
-  if (sleep >= 5) return 45;
+function getSleepScore(sleep: number, sleepGoal: number) {
+  if (sleep >= sleepGoal) return 100;
+  if (sleep >= sleepGoal - 1) return 75;
+  if (sleep >= sleepGoal - 2) return 45;
   if (sleep > 0) return 25;
   return 0;
 }
 
-function getWaterScore(water: number) {
-  if (water >= 2.5) return 100;
-  if (water >= 2) return 80;
-  if (water >= 1.5) return 60;
+function getWaterScore(water: number, waterGoal: number) {
+  if (water >= waterGoal) return 100;
+  if (water >= waterGoal * 0.8) return 80;
+  if (water >= waterGoal * 0.6) return 60;
   if (water > 0) return 30;
   return 0;
 }
@@ -205,22 +257,22 @@ function getMoodScore(mood: DailyLog["mood"]) {
   return 20;
 }
 
-function getBaselineScore(log?: DailyLog) {
+function getBaselineScore(log: DailyLog | undefined, goals: Goals) {
   if (!log) return 0;
 
   return Math.round(
-    getSleepScore(log.sleep) * 0.35 +
-      getWaterScore(log.water) * 0.3 +
+    getSleepScore(log.sleep, goals.sleepGoal) * 0.35 +
+      getWaterScore(log.water, goals.waterGoal) * 0.3 +
       getSnackScore(log.snackLevel) * 0.25 +
       getMoodScore(log.mood) * 0.1
   );
 }
 
-function getProteinScore(protein: number) {
-  if (protein >= 120) return 100;
-  if (protein >= 100) return 85;
-  if (protein >= 80) return 65;
-  if (protein >= 60) return 45;
+function getProteinScore(protein: number, proteinGoal: number) {
+  if (protein >= proteinGoal) return 100;
+  if (protein >= proteinGoal * 0.85) return 85;
+  if (protein >= proteinGoal * 0.65) return 65;
+  if (protein >= proteinGoal * 0.5) return 45;
   if (protein > 0) return 25;
   return 0;
 }
@@ -240,12 +292,14 @@ function getCoachPlan({
   workoutMinutes,
   sweetDrinkCount,
   junkCount,
+  goals,
 }: {
   dailyLog?: DailyLog;
   totalProtein: number;
   workoutMinutes: number;
   sweetDrinkCount: number;
   junkCount: number;
+  goals: Goals;
 }) {
   if (!dailyLog) {
     return {
@@ -255,27 +309,27 @@ function getCoachPlan({
     };
   }
 
-  if (dailyLog.sleep > 0 && dailyLog.sleep < 6) {
+  if (dailyLog.sleep > 0 && dailyLog.sleep < goals.sleepGoal - 1) {
     return {
       priority: "Recover first. Sleep is the main issue today.",
-      why: "Low sleep increases cravings, makes hunger harder to control, and can make training feel worse.",
+      why: `Your sleep goal is ${goals.sleepGoal}h. Low sleep increases cravings and makes training feel worse.`,
       nextAction:
         "Keep workout light today. Hit water, protein, and try to sleep earlier tonight.",
     };
   }
 
-  if (dailyLog.water < 2) {
+  if (dailyLog.water < goals.waterGoal) {
     return {
       priority: "Drink water before judging hunger.",
-      why: "When water is low, hunger and cravings can feel stronger than they actually are.",
-      nextAction: "Push water to at least 2L today. Then decide if you still need more food.",
+      why: `Your water goal is ${goals.waterGoal}L. When water is low, hunger and cravings can feel stronger than they actually are.`,
+      nextAction: `Push water to at least ${goals.waterGoal}L today. Then decide if you still need more food.`,
     };
   }
 
-  if (totalProtein < 80) {
+  if (totalProtein < goals.proteinGoal * 0.65) {
     return {
       priority: "Protein is too low.",
-      why: "If protein stays low while cutting weight, you risk looking flat and losing muscle.",
+      why: `Your protein goal is ${goals.proteinGoal}g. If protein stays low while cutting weight, you risk looking flat and losing muscle.`,
       nextAction:
         "Add one protein-focused item: whey, chicken, eggs, tuna, Greek yogurt, or lean pork.",
     };
@@ -312,19 +366,27 @@ function getMissionList({
   workoutMinutes,
   sweetDrinkCount,
   junkCount,
+  goals,
 }: {
   dailyLog?: DailyLog;
   totalProtein: number;
   workoutMinutes: number;
   sweetDrinkCount: number;
   junkCount: number;
+  goals: Goals;
 }) {
   const missions: string[] = [];
 
   if (!dailyLog) missions.push("Save Daily Check-in");
-  if (dailyLog && dailyLog.water < 2) missions.push("Drink water to 2L");
-  if (dailyLog && dailyLog.sleep < 6) missions.push("Sleep earlier tonight");
-  if (totalProtein < 120) missions.push(`Add ${120 - totalProtein}g protein`);
+  if (dailyLog && dailyLog.water < goals.waterGoal) {
+    missions.push(`Drink water to ${goals.waterGoal}L`);
+  }
+  if (dailyLog && dailyLog.sleep < goals.sleepGoal - 1) {
+    missions.push("Sleep earlier tonight");
+  }
+  if (totalProtein < goals.proteinGoal) {
+    missions.push(`Add ${Math.round(goals.proteinGoal - totalProtein)}g protein`);
+  }
   if (workoutMinutes === 0) missions.push("Log one workout or walk");
   if (sweetDrinkCount > 0) missions.push("No more sweet drink today");
   if (junkCount > 0) missions.push("Next meal must be cleaner");
@@ -337,6 +399,7 @@ function getMissionList({
 }
 
 export default function CoachPage() {
+  const [goals, setGoals] = useState<Goals>(defaultGoals);
   const [dailyLogs, setDailyLogs] = useState<DailyLog[]>([]);
   const [foodLogs, setFoodLogs] = useState<FoodLog[]>([]);
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([]);
@@ -344,17 +407,18 @@ export default function CoachPage() {
 
   useEffect(() => {
     const savedDaily = safeParseArray<Record<string, unknown>>(
-      localStorage.getItem("operation-recode-logs-no-waist")
+      localStorage.getItem(storageKeys.daily)
     );
 
     const savedFood = safeParseArray<Record<string, unknown>>(
-      localStorage.getItem("operation-recode-food-logs")
+      localStorage.getItem(storageKeys.food)
     );
 
     const savedWorkout = safeParseArray<Record<string, unknown>>(
-      localStorage.getItem("operation-recode-workout-logs")
+      localStorage.getItem(storageKeys.workout)
     );
 
+    setGoals(loadGoals());
     setDailyLogs(savedDaily.map((item) => normalizeDailyLog(item)));
     setFoodLogs(savedFood.map((item) => normalizeFoodLog(item)));
     setWorkoutLogs(savedWorkout.map((item) => normalizeWorkoutLog(item)));
@@ -377,6 +441,7 @@ export default function CoachPage() {
   const selectedWorkoutLogs = workoutLogs.filter((log) => log.date === selectedDate);
 
   const totalProtein = selectedFoodLogs.reduce((sum, log) => sum + log.protein, 0);
+  const proteinLeft = Math.max(goals.proteinGoal - totalProtein, 0);
   const sweetDrinkCount = selectedFoodLogs.filter((log) => log.sweetDrink).length;
   const junkCount = selectedFoodLogs.filter((log) => log.junkFood).length;
 
@@ -385,8 +450,8 @@ export default function CoachPage() {
     0
   );
 
-  const baselineScore = getBaselineScore(dailyLog);
-  const proteinScore = getProteinScore(totalProtein);
+  const baselineScore = getBaselineScore(dailyLog, goals);
+  const proteinScore = getProteinScore(totalProtein, goals.proteinGoal);
   const workoutScore = getWorkoutScore(workoutMinutes);
 
   const overallScore = Math.round(
@@ -399,6 +464,7 @@ export default function CoachPage() {
     workoutMinutes,
     sweetDrinkCount,
     junkCount,
+    goals,
   });
 
   const missions = getMissionList({
@@ -407,6 +473,7 @@ export default function CoachPage() {
     workoutMinutes,
     sweetDrinkCount,
     junkCount,
+    goals,
   });
 
   return (
@@ -427,7 +494,7 @@ export default function CoachPage() {
           </div>
 
           <div className="rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-zinc-300">
-            Coach / v1.3
+            Coach / v1.4
           </div>
         </nav>
 
@@ -538,9 +605,9 @@ export default function CoachPage() {
               value={`${baselineScore}/100`}
               note={
                 dailyLog
-                  ? `${dailyLog.weight || "-"} kg · ${dailyLog.sleep || 0}h sleep · ${
+                  ? `${dailyLog.weight || "-"} kg · ${dailyLog.sleep || 0}/${goals.sleepGoal}h sleep · ${
                       dailyLog.water || 0
-                    }L water`
+                    }/${goals.waterGoal}L water`
                   : "No daily check-in"
               }
             />
@@ -548,7 +615,7 @@ export default function CoachPage() {
             <SummaryCard
               label="Food"
               value={`${totalProtein}g`}
-              note={`Goal 120g · ${selectedFoodLogs.length} items`}
+              note={`Goal ${goals.proteinGoal}g · ${proteinLeft}g left`}
             />
 
             <SummaryCard

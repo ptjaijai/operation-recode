@@ -15,6 +15,7 @@ type Goals = {
   proteinGoal: number;
   waterGoal: number;
   sleepGoal: number;
+  workoutGoal: number;
 };
 
 type BackupData = {
@@ -31,6 +32,7 @@ const defaultGoals: Goals = {
   proteinGoal: 120,
   waterGoal: 2,
   sleepGoal: 7,
+  workoutGoal: 30,
 };
 
 function safeParseArray(value: string | null) {
@@ -69,6 +71,10 @@ function loadGoals(): Goals {
         typeof parsed.sleepGoal === "number"
           ? parsed.sleepGoal
           : defaultGoals.sleepGoal,
+      workoutGoal:
+        typeof parsed.workoutGoal === "number"
+          ? parsed.workoutGoal
+          : defaultGoals.workoutGoal,
     };
   } catch {
     return defaultGoals;
@@ -77,7 +83,7 @@ function loadGoals(): Goals {
 
 function createBackup(): BackupData {
   return {
-    version: "operation-recode-backup-v2",
+    version: "operation-recode-backup-v3",
     exportedAt: new Date().toISOString(),
     goals: loadGoals(),
     daily: safeParseArray(localStorage.getItem(storageKeys.daily)),
@@ -113,7 +119,7 @@ export default function SettingsPage() {
 
   function saveGoals() {
     localStorage.setItem(storageKeys.goals, JSON.stringify(goals));
-    setStatus("Goals saved. Other pages can now use these targets.");
+    setStatus("Goals saved. Dashboard, Food, Plan, Coach, and Progress can use these targets.");
   }
 
   function resetGoals() {
@@ -205,6 +211,10 @@ export default function SettingsPage() {
             typeof parsed.goals.sleepGoal === "number"
               ? parsed.goals.sleepGoal
               : defaultGoals.sleepGoal,
+          workoutGoal:
+            typeof parsed.goals.workoutGoal === "number"
+              ? parsed.goals.workoutGoal
+              : defaultGoals.workoutGoal,
         };
 
         localStorage.setItem(storageKeys.goals, JSON.stringify(importedGoals));
@@ -253,22 +263,23 @@ export default function SettingsPage() {
           </div>
 
           <div className="rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-zinc-300">
-            Settings / v0.2
+            Settings / v0.3
           </div>
         </nav>
 
-        <section className="grid gap-5 md:grid-cols-4">
+        <section className="grid gap-5 md:grid-cols-5">
           <StatCard label="Target Weight" value={`${goals.targetWeight} kg`} />
           <StatCard label="Protein Goal" value={`${goals.proteinGoal}g`} />
           <StatCard label="Water Goal" value={`${goals.waterGoal}L`} />
           <StatCard label="Sleep Goal" value={`${goals.sleepGoal}h`} />
+          <StatCard label="Workout Goal" value={`${goals.workoutGoal} min`} />
         </section>
 
         <section className="mt-5 rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
           <p className="text-sm text-zinc-400">Goals</p>
           <h2 className="mt-1 text-2xl font-bold">Set your targets</h2>
 
-          <div className="mt-5 grid gap-3 md:grid-cols-4">
+          <div className="mt-5 grid gap-3 md:grid-cols-5">
             <Input
               label="Target Weight (kg)"
               type="number"
@@ -305,6 +316,15 @@ export default function SettingsPage() {
               value={String(goals.sleepGoal)}
               onChange={(value) =>
                 setGoals({ ...goals, sleepGoal: Number(value) })
+              }
+            />
+
+            <Input
+              label="Workout Goal (min/day)"
+              type="number"
+              value={String(goals.workoutGoal)}
+              onChange={(value) =>
+                setGoals({ ...goals, workoutGoal: Number(value) })
               }
             />
           </div>
@@ -419,7 +439,7 @@ function StatCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5">
       <p className="text-sm text-zinc-400">{label}</p>
-      <p className="mt-3 text-4xl font-black">{value}</p>
+      <p className="mt-3 text-3xl font-black md:text-4xl">{value}</p>
     </div>
   );
 }

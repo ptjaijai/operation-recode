@@ -37,30 +37,90 @@ function getSnackLabel(level: DailyLog["snackLevel"]) {
   return "Heavy";
 }
 
+function getSleepScore(hours: number) {
+  if (hours >= 7) return 100;
+  if (hours >= 6) return 75;
+  if (hours >= 5) return 45;
+  return 20;
+}
+
+function getWaterScore(liters: number) {
+  if (liters >= 2.5) return 100;
+  if (liters >= 2) return 75;
+  if (liters >= 1.5) return 50;
+  return 25;
+}
+
+function getSnackScore(level: DailyLog["snackLevel"]) {
+  if (level === "none") return 100;
+  if (level === "light") return 80;
+  if (level === "medium") return 55;
+  return 20;
+}
+
+function getExerciseScore(exercise: string) {
+  const clean = exercise.trim().toLowerCase();
+
+  if (!clean || clean === "baseline") return 0;
+
+  return 100;
+}
+
+function getDailyScore(log: DailyLog) {
+  const sleep = getSleepScore(log.sleepHours);
+  const water = getWaterScore(log.waterLiters);
+  const snack = getSnackScore(log.snackLevel);
+  const exercise = getExerciseScore(log.exercise);
+
+  return Math.round(sleep * 0.25 + water * 0.25 + snack * 0.3 + exercise * 0.2);
+}
+
+function getPriority(log: DailyLog) {
+  const items = [
+    {
+      key: "Sleep",
+      score: getSleepScore(log.sleepHours),
+      message: "คืนนี้พยายามนอนเร็วขึ้น 30 นาที จะช่วยลดความหิวและฟื้นตัวดีขึ้น",
+    },
+    {
+      key: "Water",
+      score: getWaterScore(log.waterLiters),
+      message: "วันนี้เพิ่มน้ำอีกหน่อย เป้าคือ 2.5–3L โดยเฉพาะวันที่ตีแบด",
+    },
+    {
+      key: "Snacks",
+      score: getSnackScore(log.snackLevel),
+      message: "ตัวหลักที่ต้องคุมคือของจุกจิก พรุ่งนี้ลดลงครึ่งหนึ่งพอ ไม่ต้องตัดหมด",
+    },
+    {
+      key: "Exercise",
+      score: getExerciseScore(log.exercise),
+      message: "วันนี้ยังไม่มี exercise log ถ้าไม่ได้ตีแบด ให้ทำเวทที่บ้าน 15–20 นาที",
+    },
+  ];
+
+  return items.sort((a, b) => a.score - b.score)[0];
+}
+
 function getCoachMessage(latest: DailyLog, previous?: DailyLog) {
+  const score = getDailyScore(latest);
+  const priority = getPriority(latest);
+
   if (!previous) {
-    return "วันนี้คือจุดเริ่มต้น เก็บข้อมูลจริงก่อน ยังไม่ต้องเพอร์เฟกต์ เป้าหมายคือทำให้ต่อเนื่อง";
+    return `วันนี้คือจุดเริ่มต้น คะแนนวันนี้ ${score}/100 เก็บข้อมูลจริงก่อน ยังไม่ต้องเพอร์เฟกต์ Priority คือ ${priority.key}: ${priority.message}`;
   }
 
   const diff = latest.weight - previous.weight;
 
   if (diff > 0.5) {
-    return "น้ำหนักขึ้นวันนี้ยังไม่ต้องตกใจ อาจเป็นน้ำ โซเดียม คาร์บ หรือเวลาชั่ง ให้ดูค่าเฉลี่ยหลายวันแทน";
+    return `น้ำหนักขึ้นวันนี้ยังไม่ต้องตกใจ อาจเป็นน้ำ โซเดียม คาร์บ หรือเวลาชั่ง คะแนนวันนี้ ${score}/100 Priority คือ ${priority.key}: ${priority.message}`;
   }
 
   if (diff < -0.4) {
-    return "น้ำหนักลงดีมาก แต่ต้องกินโปรตีนให้ถึง เพื่อไม่ให้กล้ามหาย";
+    return `น้ำหนักลงดีมาก คะแนนวันนี้ ${score}/100 แต่ต้องกินโปรตีนให้ถึง เพื่อไม่ให้กล้ามหาย Priority คือ ${priority.key}: ${priority.message}`;
   }
 
-  if (latest.snackLevel === "heavy") {
-    return "วันนี้ของจุกจิกค่อนข้างเยอะ พรุ่งนี้ไม่ต้องอด แค่ลดขนมลงครึ่งหนึ่งก็พอ";
-  }
-
-  if (latest.sleepHours < 6) {
-    return "การนอนยังน้อยไป พรุ่งนี้พยายามนอนเร็วขึ้น 30 นาที จะช่วยเรื่องหิวและการฟื้นตัว";
-  }
-
-  return "วันนี้อยู่ในทางที่ดี รักษาความต่อเนื่องไว้ ไม่ต้องสุด แค่ไม่หลุดยาวก็ชนะแล้ว";
+  return `คะแนนวันนี้ ${score}/100 อยู่ในทางที่ดี เป้าหมายไม่ใช่เพอร์เฟกต์ แต่คือไม่หลุดยาว Priority คือ ${priority.key}: ${priority.message}`;
 }
 
 export default function Home() {
@@ -119,6 +179,19 @@ export default function Home() {
   const remaining = latest.weight - GOAL_WEIGHT;
   const coachMessage = getCoachMessage(latest, previous);
 
+  const dailyScore = getDailyScore(latest);
+  const sleepScore = getSleepScore(latest.sleepHours);
+  const waterScore = getWaterScore(latest.waterLiters);
+  const snackScore = getSnackScore(latest.snackLevel);
+  const exerciseScore = getExerciseScore(latest.exercise);
+  const priority = getPriority(latest);
+
+  const last7Logs = sortedLogs.slice(-7);
+  const averageWeight =
+    last7Logs.length > 0
+      ? last7Logs.reduce((sum, log) => sum + log.weight, 0) / last7Logs.length
+      : latest.weight;
+
   function saveLog() {
     const newLog: DailyLog = {
       ...form,
@@ -154,8 +227,14 @@ export default function Home() {
   }
 
   const chartPoints = sortedLogs.slice(-14);
-  const maxWeight = Math.max(...chartPoints.map((log) => log.weight), START_WEIGHT);
-  const minWeight = Math.min(...chartPoints.map((log) => log.weight), GOAL_WEIGHT);
+  const maxWeight = Math.max(
+    ...chartPoints.map((log) => log.weight),
+    START_WEIGHT
+  );
+  const minWeight = Math.min(
+    ...chartPoints.map((log) => log.weight),
+    GOAL_WEIGHT
+  );
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
@@ -190,22 +269,24 @@ export default function Home() {
                 </h2>
                 <p className="mt-4 max-w-xl text-sm leading-6 text-zinc-400 md:text-base">
                   โฟกัสหลักคือ น้ำหนักเฉลี่ย 7 วัน + รูปหุ่นรายสัปดาห์ +
-                  ความสม่ำเสมอ ไม่ใช้รอบเอวแล้ว เพราะวัดยากและเพี้ยนง่าย
+                  Daily Score ไม่ใช้รอบเอวแล้ว เพราะวัดยากและเพี้ยนง่าย
                 </p>
               </div>
 
               <div className="min-w-44 rounded-2xl bg-zinc-950 p-5">
-                <p className="text-sm text-zinc-500">Weight Progress</p>
-                <p className="mt-2 text-4xl font-bold">{Math.round(progress)}%</p>
+                <p className="text-sm text-zinc-500">Daily Score</p>
+                <p className="mt-2 text-5xl font-black">
+                  {dailyScore}
+                  <span className="text-2xl text-zinc-500">/100</span>
+                </p>
                 <div className="mt-4 h-3 overflow-hidden rounded-full bg-zinc-800">
                   <div
                     className="h-full rounded-full bg-emerald-400 transition-all"
-                    style={{ width: `${progress}%` }}
+                    style={{ width: `${dailyScore}%` }}
                   />
                 </div>
                 <p className="mt-3 text-xs text-zinc-500">
-                  Lost {weightLost.toFixed(1)} kg / Remaining{" "}
-                  {remaining.toFixed(1)} kg
+                  Priority: {priority.key}
                 </p>
               </div>
             </div>
@@ -218,16 +299,16 @@ export default function Home() {
                 note="Latest log"
               />
               <StatCard
+                label="7-Day Avg"
+                value={averageWeight.toFixed(1)}
+                unit="kg"
+                note="Better than daily weight"
+              />
+              <StatCard
                 label="Goal Weight"
                 value="60.0"
                 unit="kg"
                 note="Operation target"
-              />
-              <StatCard
-                label="Sleep"
-                value={latest.sleepHours.toFixed(1)}
-                unit="hr"
-                note="Last check-in"
               />
               <StatCard
                 label="Remaining"
@@ -235,6 +316,20 @@ export default function Home() {
                 unit="kg"
                 note="To goal"
               />
+            </div>
+
+            <div className="mt-6">
+              <p className="mb-3 text-sm text-zinc-400">Weight Progress</p>
+              <div className="h-3 overflow-hidden rounded-full bg-zinc-800">
+                <div
+                  className="h-full rounded-full bg-emerald-400 transition-all"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <p className="mt-2 text-xs text-zinc-500">
+                Lost {weightLost.toFixed(1)} kg / Remaining{" "}
+                {remaining.toFixed(1)} kg
+              </p>
             </div>
           </section>
 
@@ -308,7 +403,9 @@ export default function Home() {
               <span className="text-xs text-zinc-500">Notes</span>
               <textarea
                 value={form.notes}
-                onChange={(event) => setForm({ ...form, notes: event.target.value })}
+                onChange={(event) =>
+                  setForm({ ...form, notes: event.target.value })
+                }
                 placeholder="เช่น วันนี้ตีแบด 3 ชม. / กินหมูกระทะ / นอนดึก"
                 className="mt-1 min-h-24 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
               />
@@ -339,14 +436,11 @@ export default function Home() {
               {coachMessage}
             </p>
 
-            <div className="mt-5 space-y-3">
-              <MissionItem label="Protein 120g" done={latest.snackLevel !== "heavy"} />
-              <MissionItem label="Water 2.5–3L" done={latest.waterLiters >= 2.5} />
-              <MissionItem label="Sleep 7h+" done={latest.sleepHours >= 7} />
-              <MissionItem
-                label="Snack control"
-                done={latest.snackLevel === "none" || latest.snackLevel === "light"}
-              />
+            <div className="mt-5 grid gap-3">
+              <ScoreRow label="Sleep" score={sleepScore} detail={`${latest.sleepHours.toFixed(1)} hr`} />
+              <ScoreRow label="Water" score={waterScore} detail={`${latest.waterLiters.toFixed(1)} L`} />
+              <ScoreRow label="Snacks" score={snackScore} detail={getSnackLabel(latest.snackLevel)} />
+              <ScoreRow label="Exercise" score={exerciseScore} detail={latest.exercise || "No log"} />
             </div>
           </section>
 
@@ -433,13 +527,14 @@ export default function Home() {
               .map((log) => (
                 <div
                   key={log.id}
-                  className="grid gap-3 rounded-2xl bg-zinc-950 p-4 text-sm md:grid-cols-6 md:items-center"
+                  className="grid gap-3 rounded-2xl bg-zinc-950 p-4 text-sm md:grid-cols-7 md:items-center"
                 >
                   <div>
                     <p className="font-bold">{log.date}</p>
                     <p className="text-zinc-500">Mood {log.mood}/10</p>
                   </div>
                   <p>{log.weight.toFixed(1)} kg</p>
+                  <p>{getDailyScore(log)}/100</p>
                   <p>{log.sleepHours.toFixed(1)} hr sleep</p>
                   <p>{log.waterLiters.toFixed(1)} L water</p>
                   <p>{getSnackLabel(log.snackLevel)}</p>
@@ -476,19 +571,33 @@ function StatCard({
   );
 }
 
-function MissionItem({ label, done }: { label: string; done: boolean }) {
+function ScoreRow({
+  label,
+  score,
+  detail,
+}: {
+  label: string;
+  score: number;
+  detail: string;
+}) {
   return (
-    <div className="flex items-center justify-between rounded-2xl bg-zinc-950 p-4 text-sm">
-      <span>{label}</span>
-      <span
-        className={
-          done
-            ? "rounded-full bg-emerald-400 px-3 py-1 text-xs font-bold text-zinc-950"
-            : "rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-400"
-        }
-      >
-        {done ? "Done" : "Focus"}
-      </span>
+    <div className="rounded-2xl bg-zinc-950 p-4">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="font-bold">{label}</p>
+          <p className="text-xs text-zinc-500">{detail}</p>
+        </div>
+        <p className="text-lg font-black">
+          {score}
+          <span className="text-xs text-zinc-500">/100</span>
+        </p>
+      </div>
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-zinc-800">
+        <div
+          className="h-full rounded-full bg-emerald-400"
+          style={{ width: `${score}%` }}
+        />
+      </div>
     </div>
   );
 }

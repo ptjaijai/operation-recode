@@ -6,6 +6,13 @@ import AppNav from "./AppNav";
 type SnackLevel = "none" | "low" | "medium" | "high";
 type MoodLevel = "great" | "good" | "neutral" | "tired" | "bad";
 
+type Goals = {
+  targetWeight: number;
+  proteinGoal: number;
+  waterGoal: number;
+  sleepGoal: number;
+};
+
 type DailyLog = {
   id: string;
   date: string;
@@ -17,6 +24,18 @@ type DailyLog = {
   notes: string;
 };
 
+const storageKeys = {
+  daily: "operation-recode-logs-no-waist",
+  goals: "operation-recode-goals",
+};
+
+const defaultGoals: Goals = {
+  targetWeight: 60,
+  proteinGoal: 120,
+  waterGoal: 2,
+  sleepGoal: 7,
+};
+
 function getLocalDateString(date = new Date()) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -26,6 +45,37 @@ function getLocalDateString(date = new Date()) {
 }
 
 const today = getLocalDateString();
+
+function loadGoals(): Goals {
+  const saved = localStorage.getItem(storageKeys.goals);
+
+  if (!saved) return defaultGoals;
+
+  try {
+    const parsed = JSON.parse(saved) as Partial<Goals>;
+
+    return {
+      targetWeight:
+        typeof parsed.targetWeight === "number"
+          ? parsed.targetWeight
+          : defaultGoals.targetWeight,
+      proteinGoal:
+        typeof parsed.proteinGoal === "number"
+          ? parsed.proteinGoal
+          : defaultGoals.proteinGoal,
+      waterGoal:
+        typeof parsed.waterGoal === "number"
+          ? parsed.waterGoal
+          : defaultGoals.waterGoal,
+      sleepGoal:
+        typeof parsed.sleepGoal === "number"
+          ? parsed.sleepGoal
+          : defaultGoals.sleepGoal,
+    };
+  } catch {
+    return defaultGoals;
+  }
+}
 
 function formatDateForMenu(dateString: string) {
   if (!dateString) return "";
@@ -125,18 +175,18 @@ function normalizeLog(raw: Record<string, unknown>): DailyLog {
   };
 }
 
-function getSleepScore(sleep: number) {
-  if (sleep >= 7) return 100;
-  if (sleep >= 6) return 75;
-  if (sleep >= 5) return 45;
+function getSleepScore(sleep: number, sleepGoal: number) {
+  if (sleep >= sleepGoal) return 100;
+  if (sleep >= sleepGoal - 1) return 75;
+  if (sleep >= sleepGoal - 2) return 45;
   if (sleep > 0) return 25;
   return 0;
 }
 
-function getWaterScore(water: number) {
-  if (water >= 2.5) return 100;
-  if (water >= 2) return 80;
-  if (water >= 1.5) return 60;
+function getWaterScore(water: number, waterGoal: number) {
+  if (water >= waterGoal) return 100;
+  if (water >= waterGoal * 0.8) return 80;
+  if (water >= waterGoal * 0.6) return 60;
   if (water > 0) return 30;
   return 0;
 }
@@ -158,26 +208,26 @@ function getMoodScore(mood?: MoodLevel) {
   return 60;
 }
 
-function getDailyScore(log?: DailyLog) {
+function getDailyScore(log: DailyLog | undefined, goals: Goals) {
   if (!log) return 0;
 
   return Math.round(
-    getSleepScore(log.sleep) * 0.35 +
-      getWaterScore(log.water) * 0.3 +
+    getSleepScore(log.sleep, goals.sleepGoal) * 0.35 +
+      getWaterScore(log.water, goals.waterGoal) * 0.3 +
       getSnackScore(log.snackLevel) * 0.25 +
       getMoodScore(log.mood) * 0.1
   );
 }
 
-function getCoachMessage(log?: DailyLog) {
+function getCoachMessage(log: DailyLog | undefined, goals: Goals) {
   if (!log) return "Start by saving today’s check-in.";
 
-  if (log.sleep > 0 && log.sleep < 6) {
-    return "Priority: sleep. Low sleep makes cravings and hunger harder to control.";
+  if (log.sleep > 0 && log.sleep < goals.sleepGoal - 1) {
+    return `Priority: sleep. Your goal is ${goals.sleepGoal}h. Low sleep makes cravings harder to control.`;
   }
 
-  if (log.water < 2) {
-    return "Priority: water. Push toward 2L today before judging hunger.";
+  if (log.water < goals.waterGoal) {
+    return `Priority: water. Push toward ${goals.waterGoal}L before judging hunger.`;
   }
 
   if (log.snackLevel === "high") {
@@ -208,11 +258,14 @@ function getMoodLabel(level: MoodLevel) {
 
 export default function DashboardPage() {
   const [logs, setLogs] = useState<DailyLog[]>([]);
+  const [goals, setGoals] = useState<Goals>(defaultGoals);
   const [selectedDate, setSelectedDate] = useState(today);
   const [form, setForm] = useState<DailyLog>(() => createEmptyLog(today));
 
   useEffect(() => {
-    const saved = localStorage.getItem("operation-recode-logs-no-waist");
+    setGoals(loadGoals());
+
+    const saved = localStorage.getItem(storageKeys.daily);
 
     if (!saved) return;
 
@@ -228,7 +281,7 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("operation-recode-logs-no-waist", JSON.stringify(logs));
+    localStorage.setItem(storageKeys.daily, JSON.stringify(logs));
   }, [logs]);
 
   const availableDates = useMemo(() => {
@@ -269,6 +322,7 @@ export default function DashboardPage() {
   const latestWeight = weightLogs[weightLogs.length - 1]?.weight ?? 0;
   const firstWeight = weightLogs[0]?.weight ?? 0;
   const weightChange = latestWeight && firstWeight ? latestWeight - firstWeight : 0;
+  const weightLeft = latestWeight ? Math.max(latestWeight - goals.targetWeight, 0) : 0;
 
   const last7Weights = weightLogs.slice(-7);
   const avg7 =
@@ -276,8 +330,8 @@ export default function DashboardPage() {
       ? last7Weights.reduce((sum, log) => sum + log.weight, 0) / last7Weights.length
       : 0;
 
-  const selectedScore = selectedLog ? getDailyScore(selectedLog) : 0;
-  const latestScore = sortedLogs[0] ? getDailyScore(sortedLogs[0]) : 0;
+  const selectedScore = getDailyScore(selectedLog, goals);
+  const latestScore = sortedLogs[0] ? getDailyScore(sortedLogs[0], goals) : 0;
 
   function saveLog() {
     const newLog: DailyLog = {
@@ -323,36 +377,45 @@ export default function DashboardPage() {
           </div>
 
           <div className="rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-zinc-300">
-            Dashboard / v1.4
+            Dashboard / v1.5
           </div>
         </nav>
 
         <section className="mb-5 grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
           <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-6 md:p-8">
-            <p className="text-sm text-zinc-400">Current Weight</p>
+            <p className="text-sm text-zinc-400">Weight System</p>
 
-            <div className="mt-3 flex flex-wrap items-end justify-between gap-5">
-              <div>
-                <p className="text-7xl font-black tracking-tight md:text-8xl">
-                  {latestWeight ? latestWeight.toFixed(1) : "-"}
-                  <span className="ml-2 text-3xl text-zinc-500">kg</span>
-                </p>
-                <p className="mt-4 text-sm text-zinc-400">
-                  Target: 60 kg ·{" "}
-                  {weightChange
-                    ? `${weightChange > 0 ? "+" : ""}${weightChange.toFixed(1)} kg from first log`
-                    : "waiting for more data"}
-                </p>
-              </div>
+            <div className="mt-5 grid gap-4 md:grid-cols-3">
+              <BigGoalCard
+                label="Current"
+                value={latestWeight ? latestWeight.toFixed(1) : "-"}
+                unit="kg"
+                note="latest log"
+              />
 
-              <div className="rounded-3xl bg-zinc-950 p-5">
-                <p className="text-sm text-zinc-500">Latest Score</p>
-                <p className="mt-2 text-5xl font-black">
-                  {latestScore}
-                  <span className="text-xl text-zinc-500"> / 100</span>
-                </p>
-              </div>
+              <BigGoalCard
+                label="Target"
+                value={goals.targetWeight.toFixed(1)}
+                unit="kg"
+                note="from settings"
+                highlight
+              />
+
+              <BigGoalCard
+                label="To Go"
+                value={latestWeight ? weightLeft.toFixed(1) : "-"}
+                unit="kg"
+                note={latestWeight ? "left to target" : "waiting for data"}
+              />
             </div>
+
+            <p className="mt-4 text-sm text-zinc-400">
+              {weightChange
+                ? `${weightChange > 0 ? "+" : ""}${weightChange.toFixed(
+                    1
+                  )} kg from first log`
+                : "waiting for more data"}
+            </p>
           </div>
 
           <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-1">
@@ -431,7 +494,7 @@ export default function DashboardPage() {
               />
 
               <Input
-                label="Sleep (hours)"
+                label={`Sleep (hours) / Goal ${goals.sleepGoal}h`}
                 type="number"
                 step="0.1"
                 value={String(form.sleep)}
@@ -439,7 +502,7 @@ export default function DashboardPage() {
               />
 
               <Input
-                label="Water (L)"
+                label={`Water (L) / Goal ${goals.waterGoal}L`}
                 type="number"
                 step="0.1"
                 value={String(form.water)}
@@ -523,13 +586,19 @@ export default function DashboardPage() {
               </div>
 
               <p className="mt-5 text-sm leading-6 text-zinc-300">
-                {getCoachMessage(selectedLog)}
+                {getCoachMessage(selectedLog, goals)}
               </p>
             </div>
 
             <div className="mt-4 grid gap-3 md:grid-cols-4">
-              <MiniScore label="Sleep" score={selectedLog ? getSleepScore(selectedLog.sleep) : 0} />
-              <MiniScore label="Water" score={selectedLog ? getWaterScore(selectedLog.water) : 0} />
+              <MiniScore
+                label="Sleep"
+                score={selectedLog ? getSleepScore(selectedLog.sleep, goals.sleepGoal) : 0}
+              />
+              <MiniScore
+                label="Water"
+                score={selectedLog ? getWaterScore(selectedLog.water, goals.waterGoal) : 0}
+              />
               <MiniScore
                 label="Snack"
                 score={selectedLog ? getSnackScore(selectedLog.snackLevel) : 0}
@@ -561,7 +630,7 @@ export default function DashboardPage() {
                 >
                   <div>
                     <p className="font-bold">{formatDateForMenu(log.date)}</p>
-                    <p className="text-zinc-500">Score {getDailyScore(log)}/100</p>
+                    <p className="text-zinc-500">Score {getDailyScore(log, goals)}/100</p>
                   </div>
 
                   <p>{log.weight ? `${log.weight} kg` : "-"}</p>
@@ -582,6 +651,41 @@ export default function DashboardPage() {
         </section>
       </section>
     </main>
+  );
+}
+
+function BigGoalCard({
+  label,
+  value,
+  unit,
+  note,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  unit: string;
+  note: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div
+      className={
+        highlight
+          ? "rounded-3xl border border-emerald-400/50 bg-emerald-400/10 p-5"
+          : "rounded-3xl border border-zinc-800 bg-zinc-950 p-5"
+      }
+    >
+      <p className={highlight ? "text-sm text-emerald-300" : "text-sm text-zinc-500"}>
+        {label}
+      </p>
+
+      <p className="mt-3 text-5xl font-black tracking-tight md:text-6xl">
+        {value}
+        <span className="ml-1 text-xl text-zinc-500">{unit}</span>
+      </p>
+
+      <p className="mt-3 text-sm text-zinc-500">{note}</p>
+    </div>
   );
 }
 

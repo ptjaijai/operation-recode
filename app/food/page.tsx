@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import AppNav from "../AppNav";
 
 type MealType = "breakfast" | "lunch" | "dinner" | "snack" | "post-workout";
 
@@ -127,6 +128,7 @@ export default function FoodPage() {
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
       <section className="mx-auto min-h-screen w-full max-w-7xl px-5 py-6 md:px-8">
+        <AppNav />
         <nav className="mb-8 flex items-center justify-between gap-4">
           <div>
             <a href="/" className="text-xs text-zinc-500 hover:text-emerald-400">

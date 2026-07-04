@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import AppNav from "../AppNav";
+import DateMenu from "../DateMenu";
 
 type WorkoutType =
   | "badminton"
@@ -72,6 +73,54 @@ function getLocalDateString(date = new Date()) {
 }
 
 const today = getLocalDateString();
+
+function createDefaultForm(date: string): WorkoutLog {
+  return {
+    id: crypto.randomUUID(),
+    date,
+    type: "badminton",
+    durationMinutes: 180,
+    playType: "match",
+    gamesPlayed: 0,
+
+    pushupSets: 3,
+    pushupReps: 10,
+
+    squatSets: 3,
+    squatReps: 15,
+
+    plankSets: 3,
+    plankMinutes: 0.5,
+
+    sidePlankLeftSets: 0,
+    sidePlankLeftMinutes: 0,
+
+    sidePlankRightSets: 0,
+    sidePlankRightMinutes: 0,
+
+    supermanSets: 0,
+    supermanReps: 0,
+
+    lungeSets: 0,
+    lungeReps: 0,
+
+    leftLungeSets: 0,
+    leftLungeReps: 0,
+
+    rightLungeSets: 0,
+    rightLungeReps: 0,
+
+    mountainClimberSets: 0,
+    mountainClimberReps: 0,
+
+    steps: 0,
+    distanceKm: 0,
+    swimmingMeters: 0,
+    swimmingLaps: 0,
+    otherName: "",
+    notes: "",
+  };
+}
 
 function getWorkoutLabel(type: WorkoutType) {
   if (type === "badminton") return "Badminton";
@@ -349,7 +398,6 @@ function getWorkoutDetail(log: WorkoutLog) {
   if (log.type === "home-workout") {
     const pushups = getExerciseTotal(log.pushupSets, log.pushupReps);
     const squats = getExerciseTotal(log.squatSets, log.squatReps);
-
     const plank = getPlankTotalMinutes(log.plankSets, log.plankMinutes);
     const sideLeft = getPlankTotalMinutes(
       log.sidePlankLeftSets,
@@ -359,13 +407,10 @@ function getWorkoutDetail(log: WorkoutLog) {
       log.sidePlankRightSets,
       log.sidePlankRightMinutes
     );
-
     const superman = getExerciseTotal(log.supermanSets, log.supermanReps);
-
     const lunges = getExerciseTotal(log.lungeSets, log.lungeReps);
     const leftLunges = getExerciseTotal(log.leftLungeSets, log.leftLungeReps);
     const rightLunges = getExerciseTotal(log.rightLungeSets, log.rightLungeReps);
-
     const mountainClimbers = getExerciseTotal(
       log.mountainClimberSets,
       log.mountainClimberReps
@@ -397,99 +442,163 @@ function getWorkoutDetail(log: WorkoutLog) {
   return log.otherName ? log.otherName : "Other activity";
 }
 
+function normalizeWorkoutType(value: unknown): WorkoutType {
+  if (
+    value === "badminton" ||
+    value === "home-workout" ||
+    value === "walking" ||
+    value === "running" ||
+    value === "swimming" ||
+    value === "stretching" ||
+    value === "other"
+  ) {
+    return value;
+  }
+
+  return "other";
+}
+
+function normalizeWorkoutLog(raw: Record<string, unknown>): WorkoutLog {
+  return {
+    id: typeof raw.id === "string" ? raw.id : crypto.randomUUID(),
+    date: typeof raw.date === "string" ? raw.date : today,
+    type: normalizeWorkoutType(raw.type),
+    durationMinutes:
+      typeof raw.durationMinutes === "number" ? raw.durationMinutes : 0,
+
+    playType:
+      raw.playType === "casual" || raw.playType === "practice" || raw.playType === "match"
+        ? raw.playType
+        : undefined,
+    gamesPlayed: typeof raw.gamesPlayed === "number" ? raw.gamesPlayed : 0,
+
+    pushupSets: typeof raw.pushupSets === "number" ? raw.pushupSets : 0,
+    pushupReps: typeof raw.pushupReps === "number" ? raw.pushupReps : 0,
+
+    squatSets: typeof raw.squatSets === "number" ? raw.squatSets : 0,
+    squatReps: typeof raw.squatReps === "number" ? raw.squatReps : 0,
+
+    plankSets: typeof raw.plankSets === "number" ? raw.plankSets : 0,
+    plankMinutes: typeof raw.plankMinutes === "number" ? raw.plankMinutes : 0,
+
+    sidePlankLeftSets:
+      typeof raw.sidePlankLeftSets === "number" ? raw.sidePlankLeftSets : 0,
+    sidePlankLeftMinutes:
+      typeof raw.sidePlankLeftMinutes === "number" ? raw.sidePlankLeftMinutes : 0,
+
+    sidePlankRightSets:
+      typeof raw.sidePlankRightSets === "number" ? raw.sidePlankRightSets : 0,
+    sidePlankRightMinutes:
+      typeof raw.sidePlankRightMinutes === "number" ? raw.sidePlankRightMinutes : 0,
+
+    supermanSets: typeof raw.supermanSets === "number" ? raw.supermanSets : 0,
+    supermanReps: typeof raw.supermanReps === "number" ? raw.supermanReps : 0,
+
+    lungeSets: typeof raw.lungeSets === "number" ? raw.lungeSets : 0,
+    lungeReps: typeof raw.lungeReps === "number" ? raw.lungeReps : 0,
+
+    leftLungeSets: typeof raw.leftLungeSets === "number" ? raw.leftLungeSets : 0,
+    leftLungeReps: typeof raw.leftLungeReps === "number" ? raw.leftLungeReps : 0,
+
+    rightLungeSets:
+      typeof raw.rightLungeSets === "number" ? raw.rightLungeSets : 0,
+    rightLungeReps:
+      typeof raw.rightLungeReps === "number" ? raw.rightLungeReps : 0,
+
+    mountainClimberSets:
+      typeof raw.mountainClimberSets === "number" ? raw.mountainClimberSets : 0,
+    mountainClimberReps:
+      typeof raw.mountainClimberReps === "number" ? raw.mountainClimberReps : 0,
+
+    steps: typeof raw.steps === "number" ? raw.steps : 0,
+    distanceKm: typeof raw.distanceKm === "number" ? raw.distanceKm : 0,
+    swimmingMeters:
+      typeof raw.swimmingMeters === "number" ? raw.swimmingMeters : 0,
+    swimmingLaps: typeof raw.swimmingLaps === "number" ? raw.swimmingLaps : 0,
+    otherName: typeof raw.otherName === "string" ? raw.otherName : "",
+    notes: typeof raw.notes === "string" ? raw.notes : "",
+  };
+}
+
 export default function WorkoutPage() {
   const [logs, setLogs] = useState<WorkoutLog[]>([]);
   const [selectedDate, setSelectedDate] = useState(today);
-  const [form, setForm] = useState<WorkoutLog>({
-    id: crypto.randomUUID(),
-    date: today,
-    type: "badminton",
-    durationMinutes: 180,
-    playType: "match",
-    gamesPlayed: 0,
-
-    pushupSets: 3,
-    pushupReps: 10,
-
-    squatSets: 3,
-    squatReps: 15,
-
-    plankSets: 3,
-    plankMinutes: 0.5,
-
-    sidePlankLeftSets: 0,
-    sidePlankLeftMinutes: 0,
-
-    sidePlankRightSets: 0,
-    sidePlankRightMinutes: 0,
-
-    supermanSets: 0,
-    supermanReps: 0,
-
-    lungeSets: 0,
-    lungeReps: 0,
-
-    leftLungeSets: 0,
-    leftLungeReps: 0,
-
-    rightLungeSets: 0,
-    rightLungeReps: 0,
-
-    mountainClimberSets: 0,
-    mountainClimberReps: 0,
-
-    steps: 0,
-    distanceKm: 0,
-    swimmingMeters: 0,
-    swimmingLaps: 0,
-    otherName: "",
-    notes: "",
-  });
+  const [form, setForm] = useState<WorkoutLog>(() => createDefaultForm(today));
 
   useEffect(() => {
     const saved = localStorage.getItem("operation-recode-workout-logs");
-    if (saved) setLogs(JSON.parse(saved));
+
+    if (!saved) return;
+
+    try {
+      const parsed = JSON.parse(saved);
+
+      if (Array.isArray(parsed)) {
+        setLogs(parsed.map((item) => normalizeWorkoutLog(item)));
+      }
+    } catch {
+      setLogs([]);
+    }
   }, []);
 
   useEffect(() => {
     localStorage.setItem("operation-recode-workout-logs", JSON.stringify(logs));
   }, [logs]);
 
-  const todayLogs = useMemo(() => {
+  useEffect(() => {
+    setForm((current) => ({
+      ...current,
+      date: selectedDate,
+    }));
+  }, [selectedDate]);
+
+  const availableDates = useMemo(() => {
+    const dates = new Set<string>();
+
+    dates.add(today);
+
+    logs.forEach((log) => {
+      if (log.date) dates.add(log.date);
+    });
+
+    return Array.from(dates).sort((a, b) => b.localeCompare(a));
+  }, [logs]);
+
+  const selectedLogs = useMemo(() => {
     return logs.filter((log) => log.date === selectedDate);
   }, [logs, selectedDate]);
 
-  const totalMinutes = todayLogs.reduce((sum, log) => sum + log.durationMinutes, 0);
-  const totalGames = todayLogs.reduce((sum, log) => sum + (log.gamesPlayed ?? 0), 0);
-  const totalSteps = todayLogs.reduce((sum, log) => sum + (log.steps ?? 0), 0);
-  const totalDistance = todayLogs.reduce((sum, log) => sum + (log.distanceKm ?? 0), 0);
-  const totalSwimMeters = todayLogs.reduce(
+  const totalMinutes = selectedLogs.reduce((sum, log) => sum + log.durationMinutes, 0);
+  const totalGames = selectedLogs.reduce((sum, log) => sum + (log.gamesPlayed ?? 0), 0);
+  const totalSteps = selectedLogs.reduce((sum, log) => sum + (log.steps ?? 0), 0);
+  const totalDistance = selectedLogs.reduce((sum, log) => sum + (log.distanceKm ?? 0), 0);
+  const totalSwimMeters = selectedLogs.reduce(
     (sum, log) => sum + (log.swimmingMeters ?? 0),
     0
   );
 
-  const totalPushups = todayLogs.reduce(
+  const totalPushups = selectedLogs.reduce(
     (sum, log) => sum + getExerciseTotal(log.pushupSets, log.pushupReps),
     0
   );
 
-  const totalSquats = todayLogs.reduce(
+  const totalSquats = selectedLogs.reduce(
     (sum, log) => sum + getExerciseTotal(log.squatSets, log.squatReps),
     0
   );
 
-  const totalLunges = todayLogs.reduce((sum, log) => sum + getAllLunges(log), 0);
+  const totalLunges = selectedLogs.reduce((sum, log) => sum + getAllLunges(log), 0);
 
-  const totalPlankMinutes = todayLogs.reduce(
+  const totalPlankMinutes = selectedLogs.reduce(
     (sum, log) => sum + getAllPlankMinutes(log),
     0
   );
 
   const averageScore =
-    todayLogs.length > 0
+    selectedLogs.length > 0
       ? Math.round(
-          todayLogs.reduce((sum, log) => sum + getWorkoutScore(log), 0) /
-            todayLogs.length
+          selectedLogs.reduce((sum, log) => sum + getWorkoutScore(log), 0) /
+            selectedLogs.length
         )
       : 0;
 
@@ -591,23 +700,28 @@ export default function WorkoutPage() {
             <h1 className="mt-2 text-3xl font-black tracking-tight md:text-6xl">
               Workout Tracker.
               <br />
-              Build the engine.
+              Log training only.
             </h1>
           </div>
 
           <div className="rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-zinc-300">
-            Training / v0.11
+            Training / v0.12
           </div>
         </nav>
 
-        <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
-          <section className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
+        <DateMenu
+          selectedDate={selectedDate}
+          availableDates={availableDates}
+          today={today}
+          onChange={setSelectedDate}
+        />
+
+        <section className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+          <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
             <p className="text-sm text-zinc-400">Workout Check-in</p>
             <h2 className="mt-1 text-2xl font-bold">Log training</h2>
 
             <div className="mt-5 grid gap-3 md:grid-cols-2">
-              <Input label="Date" type="date" value={selectedDate} onChange={setSelectedDate} />
-
               <label className="block">
                 <span className="text-xs text-zinc-500">Workout Type</span>
                 <select
@@ -657,7 +771,7 @@ export default function WorkoutPage() {
                   </label>
 
                   <Input
-                    label="Games played (games)"
+                    label="Games played"
                     type="number"
                     value={String(form.gamesPlayed ?? 0)}
                     onChange={(value) =>
@@ -718,7 +832,7 @@ export default function WorkoutPage() {
                   />
 
                   <ExerciseSetReps
-                    title="Side Plank Left (optional)"
+                    title="Side Plank Left"
                     unit="min / set"
                     sets={form.sidePlankLeftSets ?? 0}
                     reps={form.sidePlankLeftMinutes ?? 0}
@@ -732,7 +846,7 @@ export default function WorkoutPage() {
                   />
 
                   <ExerciseSetReps
-                    title="Side Plank Right (optional)"
+                    title="Side Plank Right"
                     unit="min / set"
                     sets={form.sidePlankRightSets ?? 0}
                     reps={form.sidePlankRightMinutes ?? 0}
@@ -746,7 +860,7 @@ export default function WorkoutPage() {
                   />
 
                   <ExerciseSetReps
-                    title="Superman (optional)"
+                    title="Superman"
                     unit="reps"
                     sets={form.supermanSets ?? 0}
                     reps={form.supermanReps ?? 0}
@@ -759,7 +873,7 @@ export default function WorkoutPage() {
                   />
 
                   <ExerciseSetReps
-                    title="Lunges (optional)"
+                    title="Lunges"
                     unit="reps"
                     sets={form.lungeSets ?? 0}
                     reps={form.lungeReps ?? 0}
@@ -772,33 +886,7 @@ export default function WorkoutPage() {
                   />
 
                   <ExerciseSetReps
-                    title="Left Lunges (optional)"
-                    unit="reps"
-                    sets={form.leftLungeSets ?? 0}
-                    reps={form.leftLungeReps ?? 0}
-                    onSetsChange={(value) =>
-                      setForm({ ...form, leftLungeSets: Number(value) })
-                    }
-                    onRepsChange={(value) =>
-                      setForm({ ...form, leftLungeReps: Number(value) })
-                    }
-                  />
-
-                  <ExerciseSetReps
-                    title="Right Lunges (optional)"
-                    unit="reps"
-                    sets={form.rightLungeSets ?? 0}
-                    reps={form.rightLungeReps ?? 0}
-                    onSetsChange={(value) =>
-                      setForm({ ...form, rightLungeSets: Number(value) })
-                    }
-                    onRepsChange={(value) =>
-                      setForm({ ...form, rightLungeReps: Number(value) })
-                    }
-                  />
-
-                  <ExerciseSetReps
-                    title="Mountain Climbers (optional)"
+                    title="Mountain Climbers"
                     unit="reps"
                     sets={form.mountainClimberSets ?? 0}
                     reps={form.mountainClimberReps ?? 0}
@@ -814,7 +902,7 @@ export default function WorkoutPage() {
 
               {form.type === "walking" && (
                 <Input
-                  label="Steps (optional)"
+                  label="Steps"
                   type="number"
                   value={String(form.steps ?? 0)}
                   onChange={(value) => setForm({ ...form, steps: Number(value) })}
@@ -824,7 +912,7 @@ export default function WorkoutPage() {
               {form.type === "running" && (
                 <>
                   <Input
-                    label="Distance (km, optional)"
+                    label="Distance (km)"
                     type="number"
                     value={String(form.distanceKm ?? 0)}
                     onChange={(value) =>
@@ -833,12 +921,10 @@ export default function WorkoutPage() {
                   />
 
                   <Input
-                    label="Steps (optional)"
+                    label="Steps"
                     type="number"
                     value={String(form.steps ?? 0)}
-                    onChange={(value) =>
-                      setForm({ ...form, steps: Number(value) })
-                    }
+                    onChange={(value) => setForm({ ...form, steps: Number(value) })}
                   />
                 </>
               )}
@@ -846,7 +932,7 @@ export default function WorkoutPage() {
               {form.type === "swimming" && (
                 <>
                   <Input
-                    label="Distance (meters, optional)"
+                    label="Distance (meters)"
                     type="number"
                     value={String(form.swimmingMeters ?? 0)}
                     onChange={(value) =>
@@ -855,7 +941,7 @@ export default function WorkoutPage() {
                   />
 
                   <Input
-                    label="Laps (optional)"
+                    label="Laps"
                     type="number"
                     value={String(form.swimmingLaps ?? 0)}
                     onChange={(value) =>
@@ -882,7 +968,7 @@ export default function WorkoutPage() {
                 onChange={(event) =>
                   setForm({ ...form, notes: event.target.value })
                 }
-                placeholder="เช่น ตีแบด 3 ชม. / วิ่ง 3 กม. / side plank ข้างละ 30 วิ / เข่าโอเคไหม"
+                placeholder="เช่น ตีแบด 3 ชม. / เดิน 30 นาที / plank ไหวไหม / เข่าโอเคไหม"
                 className="mt-1 min-h-24 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
               />
             </label>
@@ -893,18 +979,27 @@ export default function WorkoutPage() {
             >
               Save Workout
             </button>
-          </section>
+          </div>
 
-          <section className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
-            <p className="text-sm text-zinc-400">Training Dashboard</p>
+          <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
+            <p className="text-sm text-zinc-400">Today Summary</p>
             <h2 className="mt-1 text-2xl font-bold">{selectedDate}</h2>
 
-            <div className="mt-6 rounded-3xl bg-zinc-950 p-5">
-              <p className="text-sm text-zinc-500">Training Score</p>
-              <p className="mt-2 text-5xl font-black">
-                {averageScore}
-                <span className="text-xl text-zinc-500"> / 100</span>
-              </p>
+            <div className="mt-5 rounded-3xl bg-zinc-950 p-5">
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                  <p className="text-sm text-zinc-500">Training Score</p>
+                  <p className="mt-2 text-5xl font-black">
+                    {averageScore}
+                    <span className="text-xl text-zinc-500"> / 100</span>
+                  </p>
+                </div>
+
+                <div className="text-right">
+                  <p className="text-sm text-zinc-500">Minutes</p>
+                  <p className="mt-2 text-4xl font-black">{totalMinutes}</p>
+                </div>
+              </div>
 
               <div className="mt-4 h-3 overflow-hidden rounded-full bg-zinc-800">
                 <div
@@ -914,48 +1009,40 @@ export default function WorkoutPage() {
               </div>
             </div>
 
-            <div className="mt-4 grid gap-3 md:grid-cols-5">
-              <StatCard label="Minutes" value={String(totalMinutes)} note="Today" />
-              <StatCard label="Games" value={String(totalGames)} note="Badminton" />
-              <StatCard
-                label="Run"
-                value={`${totalDistance.toFixed(1)} km`}
-                note="Running"
-              />
-              <StatCard
-                label="Swim"
-                value={`${totalSwimMeters} m`}
-                note="Swimming"
-              />
-              <StatCard
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <SmallStat label="Logs" value={String(selectedLogs.length)} />
+              <SmallStat label="Games" value={String(totalGames)} />
+              <SmallStat label="Steps" value={String(totalSteps)} />
+              <SmallStat label="Run" value={`${totalDistance.toFixed(1)} km`} />
+              <SmallStat label="Swim" value={`${totalSwimMeters} m`} />
+              <SmallStat
                 label="Strength"
-                value={`${totalPushups} / ${totalSquats} / ${totalLunges} / ${totalPlankMinutes.toFixed(
+                value={`${totalPushups}/${totalSquats}/${totalLunges}/${totalPlankMinutes.toFixed(
                   1
                 )}m`}
-                note="PU / SQ / LG / Plank"
               />
             </div>
 
-            <div className="mt-5 rounded-3xl bg-zinc-950 p-5">
+            <div className="mt-4 rounded-3xl bg-zinc-950 p-5">
               <p className="text-sm text-zinc-500">Training Coach Lite</p>
               <p className="mt-3 text-sm leading-6 text-zinc-300">
-                {getCoachMessage(todayLogs)}
+                {getCoachMessage(selectedLogs)}
               </p>
             </div>
-          </section>
-        </div>
+          </div>
+        </section>
 
         <section className="mt-5 rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
           <p className="text-sm text-zinc-400">Workout History</p>
-          <h3 className="mt-1 text-2xl font-bold">Today&apos;s training</h3>
+          <h3 className="mt-1 text-2xl font-bold">Training logs</h3>
 
           <div className="mt-5 grid gap-3">
-            {todayLogs.length === 0 ? (
+            {selectedLogs.length === 0 ? (
               <div className="rounded-2xl bg-zinc-950 p-5 text-sm text-zinc-500">
                 ยังไม่มี workout log วันนี้
               </div>
             ) : (
-              todayLogs
+              selectedLogs
                 .slice()
                 .reverse()
                 .map((log) => (
@@ -975,7 +1062,7 @@ export default function WorkoutPage() {
                     </div>
 
                     <p>{log.durationMinutes} min</p>
-                    <p className="text-zinc-400">{getWorkoutDetail(log)}</p>
+                    <p className="break-words text-zinc-400">{getWorkoutDetail(log)}</p>
                     <p className="text-zinc-500">{log.notes || "-"}</p>
 
                     <button
@@ -991,24 +1078,6 @@ export default function WorkoutPage() {
         </section>
       </section>
     </main>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  note,
-}: {
-  label: string;
-  value: string;
-  note: string;
-}) {
-  return (
-    <div className="min-w-0 rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
-      <p className="text-xs text-zinc-500">{label}</p>
-      <p className="mt-3 break-words text-2xl font-bold leading-tight">{value}</p>
-      <p className="mt-2 text-xs leading-5 text-zinc-500">{note}</p>
-    </div>
   );
 }
 
@@ -1052,6 +1121,15 @@ function ExerciseSetReps({
           onChange={onRepsChange}
         />
       </div>
+    </div>
+  );
+}
+
+function SmallStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+      <p className="text-xs text-zinc-500">{label}</p>
+      <p className="mt-2 break-words text-2xl font-black leading-tight">{value}</p>
     </div>
   );
 }

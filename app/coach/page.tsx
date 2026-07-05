@@ -8,6 +8,7 @@ type Goals = {
   proteinGoal: number;
   waterGoal: number;
   sleepGoal: number;
+  workoutGoal: number;
 };
 
 type DailyLog = {
@@ -56,6 +57,7 @@ const defaultGoals: Goals = {
   proteinGoal: 120,
   waterGoal: 2,
   sleepGoal: 7,
+  workoutGoal: 30,
 };
 
 function getLocalDateString(date = new Date()) {
@@ -104,6 +106,10 @@ function loadGoals(): Goals {
         typeof parsed.sleepGoal === "number"
           ? parsed.sleepGoal
           : defaultGoals.sleepGoal,
+      workoutGoal:
+        typeof parsed.workoutGoal === "number"
+          ? parsed.workoutGoal
+          : defaultGoals.workoutGoal,
     };
   } catch {
     return defaultGoals;
@@ -277,12 +283,11 @@ function getProteinScore(protein: number, proteinGoal: number) {
   return 0;
 }
 
-function getWorkoutScore(minutes: number) {
-  if (minutes >= 180) return 100;
-  if (minutes >= 120) return 85;
-  if (minutes >= 60) return 65;
-  if (minutes >= 30) return 45;
-  if (minutes > 0) return 25;
+function getWorkoutScore(minutes: number, workoutGoal: number) {
+  if (minutes >= workoutGoal) return 100;
+  if (minutes >= workoutGoal * 0.75) return 85;
+  if (minutes >= workoutGoal * 0.5) return 65;
+  if (minutes > 0) return 35;
   return 0;
 }
 
@@ -340,11 +345,10 @@ function getMainProblem({
     };
   }
 
-  if (workoutMinutes === 0) {
+  if (workoutMinutes < goals.workoutGoal) {
     return {
-      title: "No movement yet",
-      detail:
-        "วันนี้ยังไม่มี movement เลย ไม่ต้องซ้อมหนักก็ได้ แต่ควรมีอย่างน้อยเดินหรือ home workout สั้น ๆ",
+      title: "Movement is below goal",
+      detail: `วันนี้ movement ยังไม่ถึงเป้า ${goals.workoutGoal} นาที ไม่ต้องซ้อมหนักก็ได้ แต่ควรเติมให้ครบ`,
     };
   }
 
@@ -379,6 +383,7 @@ function getStrategy({
   goals: Goals;
 }) {
   const proteinLeft = Math.max(goals.proteinGoal - totalProtein, 0);
+  const workoutLeft = Math.max(goals.workoutGoal - workoutMinutes, 0);
 
   if (!dailyLog) {
     return "เริ่มจากไปหน้า Dashboard แล้วบันทึก Daily Check-in ก่อน จากนั้นกลับมาดู Coach ใหม่";
@@ -398,8 +403,8 @@ function getStrategy({
     )}g ด้วยของง่าย เช่น whey, ไก่, ไข่, ทูน่า, หมูไม่ติดมัน`;
   }
 
-  if (workoutMinutes === 0) {
-    return "เลือก movement ที่ friction ต่ำที่สุด: เดิน 30 นาที หรือ home workout 15 นาที ไม่ต้องรอ mood";
+  if (workoutMinutes < goals.workoutGoal) {
+    return `เติม movement อีกประมาณ ${workoutLeft} นาที จะเดินเร็ว ตีแบด หรือ home workout ก็ได้`;
   }
 
   if (sweetDrinkCount > 0 || junkCount > 0) {
@@ -412,12 +417,14 @@ function getStrategy({
 function getAvoidList({
   dailyLog,
   totalProtein,
+  workoutMinutes,
   sweetDrinkCount,
   junkCount,
   goals,
 }: {
   dailyLog?: DailyLog;
   totalProtein: number;
+  workoutMinutes: number;
   sweetDrinkCount: number;
   junkCount: number;
   goals: Goals;
@@ -439,6 +446,10 @@ function getAvoidList({
 
   if (totalProtein < goals.proteinGoal) {
     avoid.push("อย่าใช้มื้อคาร์บล้วนเป็นมื้อหลัก");
+  }
+
+  if (workoutMinutes < goals.workoutGoal) {
+    avoid.push("อย่ารอให้มีแรงก่อนค่อยขยับ ทำแบบสั้น ๆ ก่อน");
   }
 
   if (sweetDrinkCount > 0) {
@@ -480,8 +491,8 @@ function getTomorrowAdjustment({
     return "พรุ่งนี้วางโปรตีนตั้งแต่มื้อแรก อย่ารอให้ถึงเย็นแล้วค่อยไล่โปรตีน";
   }
 
-  if (workoutMinutes === 0) {
-    return "พรุ่งนี้ล็อก movement ไว้ก่อน เช่น เดินหลังอาหาร หรือ home workout ก่อนอาบน้ำ";
+  if (workoutMinutes < goals.workoutGoal) {
+    return `พรุ่งนี้ล็อก movement ${goals.workoutGoal} นาทีไว้ก่อน เช่น เดินหลังอาหาร หรือ home workout ก่อนอาบน้ำ`;
   }
 
   return "พรุ่งนี้ทำ pattern เดิมซ้ำ: protein first, water early, movement ไม่ต้องรอ motivation";
@@ -539,9 +550,11 @@ export default function CoachPage() {
     0
   );
 
+  const workoutLeft = Math.max(goals.workoutGoal - workoutMinutes, 0);
+
   const baselineScore = getBaselineScore(dailyLog, goals);
   const proteinScore = getProteinScore(totalProtein, goals.proteinGoal);
-  const workoutScore = getWorkoutScore(workoutMinutes);
+  const workoutScore = getWorkoutScore(workoutMinutes, goals.workoutGoal);
 
   const overallScore = Math.round(
     baselineScore * 0.4 + proteinScore * 0.35 + workoutScore * 0.25
@@ -568,6 +581,7 @@ export default function CoachPage() {
   const avoidList = getAvoidList({
     dailyLog,
     totalProtein,
+    workoutMinutes,
     sweetDrinkCount,
     junkCount,
     goals,
@@ -598,7 +612,7 @@ export default function CoachPage() {
           </div>
 
           <div className="rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-zinc-300">
-            Coach / v2.0
+            Coach / v2.1
           </div>
         </nav>
 
@@ -743,7 +757,11 @@ export default function CoachPage() {
                     : `- / ${goals.waterGoal}L`
                 }
               />
-              <NumberRow label="Workout" value={`${workoutMinutes} min`} />
+              <NumberRow
+                label="Workout"
+                value={`${workoutMinutes} / ${goals.workoutGoal} min`}
+              />
+              <NumberRow label="Workout Left" value={`${workoutLeft} min`} />
             </div>
           </InsightCard>
         </section>

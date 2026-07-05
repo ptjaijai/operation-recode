@@ -33,6 +33,7 @@ type Goals = {
   proteinGoal: number;
   waterGoal: number;
   sleepGoal: number;
+  workoutGoal: number;
 };
 
 const storageKeys = {
@@ -47,6 +48,7 @@ const defaultGoals: Goals = {
   proteinGoal: 120,
   waterGoal: 2,
   sleepGoal: 7,
+  workoutGoal: 30,
 };
 
 function getLocalDateString(date = new Date()) {
@@ -95,6 +97,10 @@ function loadGoals(): Goals {
         typeof parsed.sleepGoal === "number"
           ? parsed.sleepGoal
           : defaultGoals.sleepGoal,
+      workoutGoal:
+        typeof parsed.workoutGoal === "number"
+          ? parsed.workoutGoal
+          : defaultGoals.workoutGoal,
     };
   } catch {
     return defaultGoals;
@@ -271,6 +277,7 @@ function getWeeklyAdvice({
   avgProtein,
   proteinGoal,
   workoutMinutes,
+  workoutTarget,
   sweetDrinkCount,
   junkCount,
 }: {
@@ -278,6 +285,7 @@ function getWeeklyAdvice({
   avgProtein: number;
   proteinGoal: number;
   workoutMinutes: number;
+  workoutTarget: number;
   sweetDrinkCount: number;
   junkCount: number;
 }) {
@@ -285,8 +293,8 @@ function getWeeklyAdvice({
     return "สัปดาห์หน้าแก้ที่โปรตีนก่อน เพราะโปรตีนเฉลี่ยยังต่ำเกินไป เสี่ยงหิวและเสียกล้าม";
   }
 
-  if (workoutMinutes < 120) {
-    return "สัปดาห์หน้าเพิ่ม movement ให้สม่ำเสมอกว่านี้ ไม่ต้องหนัก แค่ให้มีหลายวัน";
+  if (workoutMinutes < workoutTarget * 0.5) {
+    return `สัปดาห์หน้าเพิ่ม movement ให้สม่ำเสมอกว่านี้ เป้ารวมควรใกล้ ${workoutTarget} นาทีต่อสัปดาห์`;
   }
 
   if (sweetDrinkCount > 2) {
@@ -342,7 +350,6 @@ export default function ProgressPage() {
 
   const latestWeight = weightLogs[weightLogs.length - 1]?.weight ?? 0;
   const firstWeight = weightLogs[0]?.weight ?? 0;
-  const weightChange = latestWeight && firstWeight ? latestWeight - firstWeight : 0;
   const weightLeft = latestWeight ? Math.max(latestWeight - goals.targetWeight, 0) : 0;
 
   const last7Weights = weightLogs.slice(-7);
@@ -387,6 +394,9 @@ export default function ProgressPage() {
     return sum + dayMinutes;
   }, 0);
 
+  const weeklyWorkoutTarget = goals.workoutGoal * 7;
+  const weeklyWorkoutLeft = Math.max(weeklyWorkoutTarget - weeklyWorkoutMinutes, 0);
+
   const weeklySweetDrinks = last7Dates.reduce((sum, date) => {
     return sum + foodLogs.filter((log) => log.date === date && log.sweetDrink).length;
   }, 0);
@@ -413,6 +423,7 @@ export default function ProgressPage() {
     avgProtein,
     proteinGoal: goals.proteinGoal,
     workoutMinutes: weeklyWorkoutMinutes,
+    workoutTarget: weeklyWorkoutTarget,
     sweetDrinkCount: weeklySweetDrinks,
     junkCount: weeklyJunkFood,
   });
@@ -435,7 +446,7 @@ export default function ProgressPage() {
           </div>
 
           <div className="rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-zinc-300">
-            Progress / v0.4
+            Progress / v0.5
           </div>
         </nav>
 
@@ -486,7 +497,11 @@ export default function ProgressPage() {
               value={`${avgProtein}g`}
               note={`Goal ${goals.proteinGoal}g`}
             />
-            <StatCard label="Workout / 7 days" value={`${weeklyWorkoutMinutes} min`} />
+            <StatCard
+              label="Workout / 7 days"
+              value={`${weeklyWorkoutMinutes} min`}
+              note={`Goal ${weeklyWorkoutTarget} min`}
+            />
           </div>
         </section>
 
@@ -494,7 +509,7 @@ export default function ProgressPage() {
           <p className="text-sm text-emerald-300">Weekly Review</p>
           <h2 className="mt-1 text-3xl font-black">Last 7 active days</h2>
 
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
+          <div className="mt-5 grid gap-3 md:grid-cols-4">
             <ReviewCard
               label="Weight Change"
               value={
@@ -507,6 +522,12 @@ export default function ProgressPage() {
                   ? `${weeklyWeightStart.toFixed(1)} → ${weeklyWeightEnd.toFixed(1)} kg`
                   : "not enough data"
               }
+            />
+
+            <ReviewCard
+              label="Workout Gap"
+              value={`${weeklyWorkoutLeft} min`}
+              note={`${weeklyWorkoutMinutes} / ${weeklyWorkoutTarget} min`}
             />
 
             <ReviewCard

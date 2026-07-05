@@ -21,6 +21,13 @@ type Goals = {
   proteinGoal: number;
   waterGoal: number;
   sleepGoal: number;
+  workoutGoal?: number;
+};
+
+type ProteinPreset = {
+  name: string;
+  protein: number;
+  mealType: MealType;
 };
 
 const storageKeys = {
@@ -33,7 +40,19 @@ const defaultGoals: Goals = {
   proteinGoal: 120,
   waterGoal: 2,
   sleepGoal: 7,
+  workoutGoal: 30,
 };
+
+const proteinPresets: ProteinPreset[] = [
+  { name: "Whey 1 scoop", protein: 25, mealType: "drink" },
+  { name: "Eggs 2 pcs", protein: 12, mealType: "breakfast" },
+  { name: "Chicken breast", protein: 35, mealType: "lunch" },
+  { name: "Tuna can", protein: 25, mealType: "lunch" },
+  { name: "Greek yogurt", protein: 15, mealType: "snack" },
+  { name: "Lean pork", protein: 30, mealType: "dinner" },
+  { name: "Milk", protein: 8, mealType: "drink" },
+  { name: "Grilled chicken", protein: 30, mealType: "lunch" },
+];
 
 function getLocalDateString(date = new Date()) {
   const year = date.getFullYear();
@@ -70,6 +89,10 @@ function loadGoals(): Goals {
         typeof parsed.sleepGoal === "number"
           ? parsed.sleepGoal
           : defaultGoals.sleepGoal,
+      workoutGoal:
+        typeof parsed.workoutGoal === "number"
+          ? parsed.workoutGoal
+          : defaultGoals.workoutGoal,
     };
   } catch {
     return defaultGoals;
@@ -276,6 +299,32 @@ export default function FoodPage() {
   const sweetDrinkCount = selectedLogs.filter((log) => log.sweetDrink).length;
   const junkCount = selectedLogs.filter((log) => log.junkFood).length;
 
+  function applyPreset(preset: ProteinPreset) {
+    setForm({
+      ...form,
+      mealType: preset.mealType,
+      foodName: preset.name,
+      protein: preset.protein,
+      sweetDrink: preset.mealType === "drink" ? form.sweetDrink : form.sweetDrink,
+      junkFood: false,
+    });
+  }
+
+  function quickSavePreset(preset: ProteinPreset) {
+    const newLog: FoodLog = {
+      id: crypto.randomUUID(),
+      date: selectedDate,
+      mealType: preset.mealType,
+      foodName: preset.name,
+      protein: preset.protein,
+      sweetDrink: false,
+      junkFood: false,
+      notes: "Quick add",
+    };
+
+    setLogs((current) => [...current, newLog]);
+  }
+
   function saveFood() {
     if (!form.foodName.trim()) {
       alert("ใส่ชื่ออาหารก่อน");
@@ -311,12 +360,12 @@ export default function FoodPage() {
             <h1 className="mt-2 text-3xl font-black tracking-tight md:text-6xl">
               Food Tracker.
               <br />
-              Log meals only.
+              Protein first.
             </h1>
           </div>
 
           <div className="rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-zinc-300">
-            Food / v1.3
+            Food / v1.4
           </div>
         </nav>
 
@@ -374,83 +423,122 @@ export default function FoodPage() {
 
         <section className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
           <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
-            <p className="text-sm text-zinc-400">Food Check-in</p>
-            <h2 className="mt-1 text-2xl font-bold">Log food</h2>
+            <p className="text-sm text-zinc-400">Quick Add</p>
+            <h2 className="mt-1 text-2xl font-bold">Protein presets</h2>
 
             <div className="mt-5 grid gap-3 md:grid-cols-2">
-              <label className="block">
-                <span className="text-xs text-zinc-500">Meal Type</span>
-                <select
-                  value={form.mealType}
-                  onChange={(event) =>
-                    setForm({ ...form, mealType: event.target.value as MealType })
-                  }
-                  className="mt-1 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
+              {proteinPresets.map((preset) => (
+                <div
+                  key={preset.name}
+                  className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4"
                 >
-                  <option value="breakfast">Breakfast</option>
-                  <option value="lunch">Lunch</option>
-                  <option value="dinner">Dinner</option>
-                  <option value="snack">Snack</option>
-                  <option value="drink">Drink</option>
-                  <option value="other">Other</option>
-                </select>
-              </label>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-bold">{preset.name}</p>
+                      <p className="mt-1 text-sm text-zinc-500">
+                        {preset.protein}g protein · {getMealLabel(preset.mealType)}
+                      </p>
+                    </div>
+                  </div>
 
-              <Input
-                label={`Protein (g) / Goal ${goals.proteinGoal}g`}
-                type="number"
-                value={String(form.protein)}
-                onChange={(value) => setForm({ ...form, protein: Number(value) })}
-              />
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => applyPreset(preset)}
+                      className="rounded-xl border border-zinc-800 px-3 py-2 text-xs font-bold text-zinc-300 hover:bg-zinc-800"
+                    >
+                      Use Form
+                    </button>
 
-              <div className="md:col-span-2">
-                <Input
-                  label="Food Name"
-                  type="text"
-                  value={form.foodName}
-                  onChange={(value) => setForm({ ...form, foodName: value })}
-                />
-              </div>
-
-              <label className="flex items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm">
-                <input
-                  type="checkbox"
-                  checked={form.sweetDrink}
-                  onChange={(event) =>
-                    setForm({ ...form, sweetDrink: event.target.checked })
-                  }
-                />
-                Sweet drink
-              </label>
-
-              <label className="flex items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm">
-                <input
-                  type="checkbox"
-                  checked={form.junkFood}
-                  onChange={(event) =>
-                    setForm({ ...form, junkFood: event.target.checked })
-                  }
-                />
-                Junk food
-              </label>
+                    <button
+                      onClick={() => quickSavePreset(preset)}
+                      className="rounded-xl bg-emerald-400 px-3 py-2 text-xs font-black text-zinc-950 hover:bg-emerald-300"
+                    >
+                      Quick Save
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
 
-            <label className="mt-3 block">
-              <span className="text-xs text-zinc-500">Notes</span>
-              <textarea
-                value={form.notes}
-                onChange={(event) => setForm({ ...form, notes: event.target.value })}
-                placeholder="เช่น ไก่ย่าง / เวย์ / ข้าวมันไก่ / น้ำหวาน"
-                className="mt-1 min-h-24 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
-              />
-            </label>
+            <div className="mt-5 rounded-3xl border border-zinc-800 bg-zinc-950 p-5">
+              <p className="text-sm text-zinc-400">Food Check-in</p>
+              <h2 className="mt-1 text-2xl font-bold">Manual log</h2>
 
-            <button
-              onClick={saveFood}
-              className="mt-4 w-full rounded-2xl bg-emerald-400 px-5 py-3 font-bold text-zinc-950 transition hover:bg-emerald-300"
-            >
-              Save Food
-            </button>
+              <div className="mt-5 grid gap-3 md:grid-cols-2">
+                <label className="block">
+                  <span className="text-xs text-zinc-500">Meal Type</span>
+                  <select
+                    value={form.mealType}
+                    onChange={(event) =>
+                      setForm({ ...form, mealType: event.target.value as MealType })
+                    }
+                    className="mt-1 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
+                  >
+                    <option value="breakfast">Breakfast</option>
+                    <option value="lunch">Lunch</option>
+                    <option value="dinner">Dinner</option>
+                    <option value="snack">Snack</option>
+                    <option value="drink">Drink</option>
+                    <option value="other">Other</option>
+                  </select>
+                </label>
+
+                <Input
+                  label={`Protein (g) / Goal ${goals.proteinGoal}g`}
+                  type="number"
+                  value={String(form.protein)}
+                  onChange={(value) => setForm({ ...form, protein: Number(value) })}
+                />
+
+                <div className="md:col-span-2">
+                  <Input
+                    label="Food Name"
+                    type="text"
+                    value={form.foodName}
+                    onChange={(value) => setForm({ ...form, foodName: value })}
+                  />
+                </div>
+
+                <label className="flex items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={form.sweetDrink}
+                    onChange={(event) =>
+                      setForm({ ...form, sweetDrink: event.target.checked })
+                    }
+                  />
+                  Sweet drink
+                </label>
+
+                <label className="flex items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={form.junkFood}
+                    onChange={(event) =>
+                      setForm({ ...form, junkFood: event.target.checked })
+                    }
+                  />
+                  Junk food
+                </label>
+              </div>
+
+              <label className="mt-3 block">
+                <span className="text-xs text-zinc-500">Notes</span>
+                <textarea
+                  value={form.notes}
+                  onChange={(event) => setForm({ ...form, notes: event.target.value })}
+                  placeholder="เช่น ไก่ย่าง / เวย์ / ข้าวมันไก่ / น้ำหวาน"
+                  className="mt-1 min-h-24 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
+                />
+              </label>
+
+              <button
+                onClick={saveFood}
+                className="mt-4 w-full rounded-2xl bg-emerald-400 px-5 py-3 font-bold text-zinc-950 transition hover:bg-emerald-300"
+              >
+                Save Food
+              </button>
+            </div>
           </div>
 
           <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
@@ -506,51 +594,49 @@ export default function FoodPage() {
                 })}
               </p>
             </div>
-          </div>
-        </section>
 
-        <section className="mt-5 rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
-          <p className="text-sm text-zinc-400">Food History</p>
-          <h3 className="mt-1 text-2xl font-bold">Food logs</h3>
+            <div className="mt-5 rounded-3xl border border-zinc-800 bg-zinc-950 p-5">
+              <p className="text-sm text-zinc-400">Food History</p>
+              <h3 className="mt-1 text-2xl font-bold">Food logs</h3>
 
-          <div className="mt-5 grid gap-3">
-            {selectedLogs.length === 0 ? (
-              <div className="rounded-2xl bg-zinc-950 p-5 text-sm text-zinc-500">
-                No food log for this date
-              </div>
-            ) : (
-              selectedLogs
-                .slice()
-                .reverse()
-                .map((log) => (
-                  <div
-                    key={log.id}
-                    className="grid gap-3 rounded-2xl bg-zinc-950 p-4 text-sm md:grid-cols-[1fr_1fr_1fr_1fr_auto] md:items-center"
-                  >
-                    <div>
-                      <p className="font-bold">{log.foodName}</p>
-                      <p className="text-zinc-500">{getMealLabel(log.mealType)}</p>
-                    </div>
-
-                    <p>{log.protein}g protein</p>
-
-                    <p className="text-zinc-400">
-                      {log.sweetDrink ? "Sweet drink" : "No sweet drink"}
-                    </p>
-
-                    <p className="text-zinc-400">
-                      {log.junkFood ? "Junk food" : "Not junk"}
-                    </p>
-
-                    <button
-                      onClick={() => deleteFood(log.id)}
-                      className="rounded-xl border border-zinc-800 px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800"
-                    >
-                      Delete
-                    </button>
+              <div className="mt-5 grid gap-3">
+                {selectedLogs.length === 0 ? (
+                  <div className="rounded-2xl bg-zinc-900 p-5 text-sm text-zinc-500">
+                    No food log for this date
                   </div>
-                ))
-            )}
+                ) : (
+                  selectedLogs
+                    .slice()
+                    .reverse()
+                    .map((log) => (
+                      <div
+                        key={log.id}
+                        className="rounded-2xl bg-zinc-900 p-4 text-sm"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-bold">{log.foodName}</p>
+                            <p className="mt-1 text-zinc-500">
+                              {getMealLabel(log.mealType)} · {log.protein}g protein
+                            </p>
+                            <p className="mt-1 text-zinc-500">
+                              {log.sweetDrink ? "Sweet drink" : "No sweet drink"} ·{" "}
+                              {log.junkFood ? "Junk food" : "Not junk"}
+                            </p>
+                          </div>
+
+                          <button
+                            onClick={() => deleteFood(log.id)}
+                            className="rounded-xl border border-zinc-800 px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                )}
+              </div>
+            </div>
           </div>
         </section>
       </section>

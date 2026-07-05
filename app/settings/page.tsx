@@ -13,6 +13,7 @@ const storageKeys = {
 type Goals = {
   targetWeight: number;
   proteinGoal: number;
+  calorieGoal: number;
   waterGoal: number;
   sleepGoal: number;
   workoutGoal: number;
@@ -30,6 +31,7 @@ type BackupData = {
 const defaultGoals: Goals = {
   targetWeight: 60,
   proteinGoal: 120,
+  calorieGoal: 1800,
   waterGoal: 2,
   sleepGoal: 7,
   workoutGoal: 30,
@@ -63,6 +65,10 @@ function loadGoals(): Goals {
         typeof parsed.proteinGoal === "number"
           ? parsed.proteinGoal
           : defaultGoals.proteinGoal,
+      calorieGoal:
+        typeof parsed.calorieGoal === "number"
+          ? parsed.calorieGoal
+          : defaultGoals.calorieGoal,
       waterGoal:
         typeof parsed.waterGoal === "number"
           ? parsed.waterGoal
@@ -83,7 +89,7 @@ function loadGoals(): Goals {
 
 function createBackup(): BackupData {
   return {
-    version: "operation-recode-backup-v3",
+    version: "operation-recode-backup-v4",
     exportedAt: new Date().toISOString(),
     goals: loadGoals(),
     daily: safeParseArray(localStorage.getItem(storageKeys.daily)),
@@ -119,7 +125,7 @@ export default function SettingsPage() {
 
   function saveGoals() {
     localStorage.setItem(storageKeys.goals, JSON.stringify(goals));
-    setStatus("Goals saved. Dashboard, Food, Plan, Coach, and Progress can use these targets.");
+    setStatus("Goals saved. Other pages can now use these targets.");
   }
 
   function resetGoals() {
@@ -177,17 +183,9 @@ export default function SettingsPage() {
     try {
       const parsed = JSON.parse(importText) as Partial<BackupData>;
 
-      if (!Array.isArray(parsed.daily)) {
-        throw new Error("Missing daily data");
-      }
-
-      if (!Array.isArray(parsed.food)) {
-        throw new Error("Missing food data");
-      }
-
-      if (!Array.isArray(parsed.workout)) {
-        throw new Error("Missing workout data");
-      }
+      if (!Array.isArray(parsed.daily)) throw new Error("Missing daily data");
+      if (!Array.isArray(parsed.food)) throw new Error("Missing food data");
+      if (!Array.isArray(parsed.workout)) throw new Error("Missing workout data");
 
       localStorage.setItem(storageKeys.daily, JSON.stringify(parsed.daily));
       localStorage.setItem(storageKeys.food, JSON.stringify(parsed.food));
@@ -203,6 +201,10 @@ export default function SettingsPage() {
             typeof parsed.goals.proteinGoal === "number"
               ? parsed.goals.proteinGoal
               : defaultGoals.proteinGoal,
+          calorieGoal:
+            typeof parsed.goals.calorieGoal === "number"
+              ? parsed.goals.calorieGoal
+              : defaultGoals.calorieGoal,
           waterGoal:
             typeof parsed.goals.waterGoal === "number"
               ? parsed.goals.waterGoal
@@ -263,13 +265,14 @@ export default function SettingsPage() {
           </div>
 
           <div className="rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-zinc-300">
-            Settings / v0.3
+            Settings / v0.4
           </div>
         </nav>
 
-        <section className="grid gap-5 md:grid-cols-5">
+        <section className="grid gap-5 md:grid-cols-3 xl:grid-cols-6">
           <StatCard label="Target Weight" value={`${goals.targetWeight} kg`} />
           <StatCard label="Protein Goal" value={`${goals.proteinGoal}g`} />
+          <StatCard label="Calorie Goal" value={`${goals.calorieGoal} kcal`} />
           <StatCard label="Water Goal" value={`${goals.waterGoal}L`} />
           <StatCard label="Sleep Goal" value={`${goals.sleepGoal}h`} />
           <StatCard label="Workout Goal" value={`${goals.workoutGoal} min`} />
@@ -279,7 +282,7 @@ export default function SettingsPage() {
           <p className="text-sm text-zinc-400">Goals</p>
           <h2 className="mt-1 text-2xl font-bold">Set your targets</h2>
 
-          <div className="mt-5 grid gap-3 md:grid-cols-5">
+          <div className="mt-5 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
             <Input
               label="Target Weight (kg)"
               type="number"
@@ -296,6 +299,15 @@ export default function SettingsPage() {
               value={String(goals.proteinGoal)}
               onChange={(value) =>
                 setGoals({ ...goals, proteinGoal: Number(value) })
+              }
+            />
+
+            <Input
+              label="Calorie Goal (kcal/day)"
+              type="number"
+              value={String(goals.calorieGoal)}
+              onChange={(value) =>
+                setGoals({ ...goals, calorieGoal: Number(value) })
               }
             />
 

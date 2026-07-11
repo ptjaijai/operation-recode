@@ -24,3 +24,54 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Operation: Recode mobile polish */
+html {
+  background: #09090b;
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: #09090b;
+  overflow-x: hidden;
+  overscroll-behavior-y: none;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  touch-action: manipulation;
+}
+
+input,
+select,
+textarea {
+  font-size: 16px;
+}
+
+button,
+a {
+  user-select: none;
+}
+
+::selection {
+  background: #34d399;
+  color: #09090b;
+}
+
+/* Hide scrollbar but keep horizontal nav scrollable */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

@@ -327,6 +327,7 @@ export default function FoodPage() {
   const [goals, setGoals] = useState<Goals>(defaultGoals);
   const [selectedDate, setSelectedDate] = useState(today);
   const [form, setForm] = useState<FoodLog>(() => createEmptyForm(today));
+  const [editingId, setEditingId] = useState("");
   const [userId, setUserId] = useState("");
   const [syncStatus, setSyncStatus] = useState("Loading local food data...");
 
@@ -414,11 +415,13 @@ export default function FoodPage() {
   }, [logs]);
 
   useEffect(() => {
+    if (editingId) return;
+
     setForm((current) => ({
       ...current,
       date: selectedDate,
     }));
-  }, [selectedDate]);
+  }, [selectedDate, editingId]);
 
   const availableDates = useMemo(() => {
     const dates = new Set<string>();
@@ -440,7 +443,6 @@ export default function FoodPage() {
   const totalCalories = selectedLogs.reduce((sum, log) => sum + log.calories, 0);
 
   const proteinLeft = Math.max(goals.proteinGoal - totalProtein, 0);
-  const calorieLeft = goals.calorieGoal - totalCalories;
 
   const proteinScore = getProteinScore(totalProtein, goals.proteinGoal);
   const proteinPercent = Math.min((totalProtein / goals.proteinGoal) * 100, 100);
@@ -467,7 +469,7 @@ export default function FoodPage() {
         return;
       }
 
-      setSyncStatus("Food log saved and synced.");
+      setSyncStatus(editingId ? "Food log updated and synced." : "Food log saved and synced.");
     } catch (error) {
       setSyncStatus(
         error instanceof Error
@@ -509,34 +511,70 @@ export default function FoodPage() {
     await saveLogToCloud(newLog);
   }
 
+  function startEditFood(log: FoodLog) {
+    setEditingId(log.id);
+    setSelectedDate(log.date);
+    setForm({
+      ...log,
+      protein: Number(log.protein),
+      calories: Number(log.calories),
+    });
+    setSyncStatus(`Editing ${log.foodName}`);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function cancelEdit() {
+    setEditingId("");
+    setForm(createEmptyForm(selectedDate));
+    setSyncStatus(userId ? "Edit cancelled. Cloud sync is ready." : "Edit cancelled.");
+  }
+
   async function saveFood() {
     if (!form.foodName.trim()) {
-      alert("ใส่ชื่ออาหารก่อน");
+      alert("Enter food name first.");
       return;
     }
 
-    const newLog: FoodLog = {
+    const savedLog: FoodLog = {
       ...form,
-      id: crypto.randomUUID(),
+      id: editingId || crypto.randomUUID(),
       date: selectedDate,
       foodName: form.foodName.trim(),
       protein: Number(form.protein),
       calories: Number(form.calories),
+      sweetDrink: Boolean(form.sweetDrink),
+      junkFood: Boolean(form.junkFood),
+      notes: form.notes.trim(),
     };
 
-    const nextLogs = [...logs, newLog];
+    const nextLogs = editingId
+      ? logs.map((log) => (log.id === editingId ? savedLog : log))
+      : [...logs, savedLog];
+
     setLogs(nextLogs);
     localStorage.setItem(storageKeys.food, JSON.stringify(nextLogs));
-    setForm(createEmptyForm(selectedDate));
 
-    await saveLogToCloud(newLog);
+    await saveLogToCloud(savedLog);
+
+    setEditingId("");
+    setForm(createEmptyForm(selectedDate));
   }
 
   async function deleteFood(id: string) {
+    const targetLog = logs.find((log) => log.id === id);
+    const confirmed = confirm(`Delete ${targetLog?.foodName ?? "this food log"}?`);
+
+    if (!confirmed) return;
+
     const nextLogs = logs.filter((log) => log.id !== id);
 
     setLogs(nextLogs);
     localStorage.setItem(storageKeys.food, JSON.stringify(nextLogs));
+
+    if (editingId === id) {
+      setEditingId("");
+      setForm(createEmptyForm(selectedDate));
+    }
 
     if (!userId) {
       setSyncStatus("Deleted locally. Login to sync deletions.");
@@ -580,12 +618,12 @@ export default function FoodPage() {
             <h1 className="mt-2 text-3xl font-black tracking-tight md:text-6xl">
               Food Tracker.
               <br />
-              Protein + calories.
+              Add or edit.
             </h1>
           </div>
 
           <div className="rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-zinc-300">
-            Food / v2.0
+            Food / v2.1
           </div>
         </nav>
 
@@ -656,14 +694,12 @@ export default function FoodPage() {
                   key={preset.name}
                   className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-bold">{preset.name}</p>
-                      <p className="mt-1 text-sm text-zinc-500">
-                        {preset.protein}g protein · {preset.calories} kcal ·{" "}
-                        {getMealLabel(preset.mealType)}
-                      </p>
-                    </div>
+                  <div>
+                    <p className="font-bold">{preset.name}</p>
+                    <p className="mt-1 text-sm text-zinc-500">
+                      {preset.protein}g protein · {preset.calories} kcal ·{" "}
+                      {getMealLabel(preset.mealType)}
+                    </p>
                   </div>
 
                   <div className="mt-4 grid grid-cols-2 gap-2">
@@ -686,8 +722,18 @@ export default function FoodPage() {
             </div>
 
             <div className="mt-5 rounded-3xl border border-zinc-800 bg-zinc-950 p-5">
-              <p className="text-sm text-zinc-400">Food Check-in</p>
-              <h2 className="mt-1 text-2xl font-bold">Manual log</h2>
+              <p className="text-sm text-zinc-400">
+                {editingId ? "Editing Food Log" : "Food Check-in"}
+              </p>
+              <h2 className="mt-1 text-2xl font-bold">
+                {editingId ? "Update food" : "Manual log"}
+              </h2>
+
+              {editingId && (
+                <div className="mt-4 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-4 text-sm text-emerald-100">
+                  Editing mode is on. Press Cancel Edit to add a new food item instead.
+                </div>
+              )}
 
               <div className="mt-5 grid gap-3 md:grid-cols-2">
                 <label className="block">
@@ -757,17 +803,26 @@ export default function FoodPage() {
                 <textarea
                   value={form.notes}
                   onChange={(event) => setForm({ ...form, notes: event.target.value })}
-                  placeholder="เช่น ไก่ย่าง / เวย์ / ข้าวมันไก่ / น้ำหวาน"
+                  placeholder="Food details, estimate source, or anything to remember"
                   className="mt-1 min-h-24 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
                 />
               </label>
 
-              <button
-                onClick={saveFood}
-                className="mt-4 w-full rounded-2xl bg-emerald-400 px-5 py-3 font-bold text-zinc-950 transition hover:bg-emerald-300"
-              >
-                Save Food + Sync
-              </button>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <button
+                  onClick={saveFood}
+                  className="rounded-2xl bg-emerald-400 px-5 py-3 font-bold text-zinc-950 transition hover:bg-emerald-300"
+                >
+                  {editingId ? "Update Food + Sync" : "Save Food + Sync"}
+                </button>
+
+                <button
+                  onClick={cancelEdit}
+                  className="rounded-2xl border border-zinc-800 bg-zinc-900 px-5 py-3 font-bold text-zinc-300 transition hover:bg-zinc-800"
+                >
+                  {editingId ? "Cancel Edit" : "Clear Form"}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -853,7 +908,11 @@ export default function FoodPage() {
                     .map((log) => (
                       <div
                         key={log.id}
-                        className="rounded-2xl bg-zinc-900 p-4 text-sm"
+                        className={
+                          editingId === log.id
+                            ? "rounded-2xl border border-emerald-400/50 bg-emerald-400/10 p-4 text-sm"
+                            : "rounded-2xl bg-zinc-900 p-4 text-sm"
+                        }
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div>
@@ -866,14 +925,28 @@ export default function FoodPage() {
                               {log.sweetDrink ? "Sweet drink" : "No sweet drink"} ·{" "}
                               {log.junkFood ? "Junk food" : "Not junk"}
                             </p>
+                            {log.notes && (
+                              <p className="mt-2 text-xs leading-5 text-zinc-500">
+                                {log.notes}
+                              </p>
+                            )}
                           </div>
 
-                          <button
-                            onClick={() => deleteFood(log.id)}
-                            className="rounded-xl border border-zinc-800 px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800"
-                          >
-                            Delete
-                          </button>
+                          <div className="grid gap-2">
+                            <button
+                              onClick={() => startEditFood(log)}
+                              className="rounded-xl border border-emerald-400/40 px-3 py-2 text-xs font-bold text-emerald-300 hover:bg-emerald-400/10"
+                            >
+                              Edit
+                            </button>
+
+                            <button
+                              onClick={() => deleteFood(log.id)}
+                              className="rounded-xl border border-zinc-800 px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800"
+                            >
+                              Delete
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))

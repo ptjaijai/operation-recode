@@ -21,6 +21,7 @@ type DailyLog = {
   water: number;
   snackLevel: string;
   mood: string;
+  notes: string;
 };
 
 type MealType = "breakfast" | "lunch" | "dinner" | "snack" | "drink" | "other";
@@ -155,6 +156,7 @@ function normalizeDaily(raw: Record<string, unknown>): DailyLog {
     water: toNumber(raw.water ?? raw.waterLiters, 0),
     snackLevel: typeof raw.snackLevel === "string" ? raw.snackLevel : "none",
     mood: typeof raw.mood === "string" ? raw.mood : "neutral",
+    notes: typeof raw.notes === "string" ? raw.notes : "",
   };
 }
 
@@ -166,6 +168,21 @@ function databaseToDaily(row: Record<string, unknown>): DailyLog {
     water: toNumber(row.water, 0),
     snackLevel: typeof row.snack_level === "string" ? row.snack_level : "none",
     mood: typeof row.mood === "string" ? row.mood : "neutral",
+    notes: typeof row.notes === "string" ? row.notes : "",
+  };
+}
+
+function dailyToDatabase(log: DailyLog, userId: string) {
+  return {
+    user_id: userId,
+    date: log.date,
+    weight: log.weight,
+    sleep: log.sleep,
+    water: log.water,
+    snack_level: log.snackLevel,
+    mood: log.mood,
+    notes: log.notes,
+    updated_at: new Date().toISOString(),
   };
 }
 
@@ -381,12 +398,39 @@ function getCoachLine({
   sleep: number;
   sleepGoal: number;
 }) {
-  if (sleep > 0 && sleep < sleepGoal - 1) return "Sleep is low. Keep today simple and clean.";
-  if (water < waterGoal) return "Drink water first. Do not confuse thirst with hunger.";
-  if (protein < proteinGoal * 0.65) return "Protein is your main mission now.";
-  if (calories > calorieGoal) return "Calories are over. Make the next meal clean.";
-  if (workoutMinutes < workoutGoal) return "Movement is still missing. A short walk counts.";
+  if (sleep > 0 && sleep < sleepGoal - 1) {
+    return "Sleep is low. Keep today simple and clean.";
+  }
+
+  if (water < waterGoal) {
+    return "Drink water first. Do not confuse thirst with hunger.";
+  }
+
+  if (protein < proteinGoal * 0.65) {
+    return "Protein is your main mission now.";
+  }
+
+  if (calories > calorieGoal) {
+    return "Calories are over. Make the next meal clean.";
+  }
+
+  if (workoutMinutes < workoutGoal) {
+    return "Movement is still missing. A short walk counts.";
+  }
+
   return "Good day. Protect the pattern.";
+}
+
+function createDailyForm(log?: DailyLog): DailyLog {
+  return {
+    date: today,
+    weight: log?.weight ?? 0,
+    sleep: log?.sleep ?? 0,
+    water: log?.water ?? 0,
+    snackLevel: log?.snackLevel ?? "none",
+    mood: log?.mood ?? "neutral",
+    notes: log?.notes ?? "",
+  };
 }
 
 export default function TodayPage() {
@@ -394,6 +438,7 @@ export default function TodayPage() {
   const [dailyLogs, setDailyLogs] = useState<DailyLog[]>([]);
   const [foodLogs, setFoodLogs] = useState<FoodLog[]>([]);
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([]);
+  const [dailyForm, setDailyForm] = useState<DailyLog>(() => createDailyForm());
   const [userId, setUserId] = useState("");
   const [syncStatus, setSyncStatus] = useState("Loading today...");
 
@@ -418,6 +463,9 @@ export default function TodayPage() {
       setFoodLogs(localFood);
       setWorkoutLogs(localWorkout);
 
+      const localTodayDaily = localDaily.find((log) => log.date === today);
+      setDailyForm(createDailyForm(localTodayDaily));
+
       try {
         const supabase = createClient();
         const { data: userData } = await supabase.auth.getUser();
@@ -431,10 +479,17 @@ export default function TodayPage() {
 
         const [goalsResult, dailyResult, foodResult, workoutResult] =
           await Promise.all([
-            supabase.from("goals").select("*").eq("user_id", userData.user.id).maybeSingle(),
+            supabase
+              .from("goals")
+              .select("*")
+              .eq("user_id", userData.user.id)
+              .maybeSingle(),
             supabase.from("daily_logs").select("*").eq("user_id", userData.user.id),
             supabase.from("food_logs").select("*").eq("user_id", userData.user.id),
-            supabase.from("workout_logs").select("*").eq("user_id", userData.user.id),
+            supabase
+              .from("workout_logs")
+              .select("*")
+              .eq("user_id", userData.user.id),
           ]);
 
         if (goalsResult.data) {
@@ -447,8 +502,12 @@ export default function TodayPage() {
           const cloudDaily = dailyResult.data.map((item) =>
             databaseToDaily(item as Record<string, unknown>)
           );
+
           setDailyLogs(cloudDaily);
           localStorage.setItem(storageKeys.daily, JSON.stringify(cloudDaily));
+
+          const cloudTodayDaily = cloudDaily.find((log) => log.date === today);
+          setDailyForm(createDailyForm(cloudTodayDaily));
         }
 
         if (!foodResult.error && foodResult.data) {
@@ -483,7 +542,10 @@ export default function TodayPage() {
   const protein = todayFood.reduce((sum, log) => sum + log.protein, 0);
   const calories = todayFood.reduce((sum, log) => sum + log.calories, 0);
   const burn = todayWorkout.reduce((sum, log) => sum + log.estimatedCalories, 0);
-  const workoutMinutes = todayWorkout.reduce((sum, log) => sum + log.durationMinutes, 0);
+  const workoutMinutes = todayWorkout.reduce(
+    (sum, log) => sum + log.durationMinutes,
+    0
+  );
   const netCalories = calories - burn;
 
   const water = todayDaily?.water ?? 0;
@@ -494,7 +556,11 @@ export default function TodayPage() {
     const dailyScore = todayDaily ? 20 : 0;
     const proteinScore = getPercent(protein, goals.proteinGoal) * 0.25;
     const calorieScore =
-      calories > 0 && netCalories <= goals.calorieGoal ? 25 : calories > 0 ? 10 : 0;
+      calories > 0 && netCalories <= goals.calorieGoal
+        ? 25
+        : calories > 0
+        ? 10
+        : 0;
     const workoutScore = getPercent(workoutMinutes, goals.workoutGoal) * 0.15;
     const waterScore = getPercent(water, goals.waterGoal) * 0.1;
     const sleepScore = getPercent(sleep, goals.sleepGoal) * 0.05;
@@ -521,6 +587,60 @@ export default function TodayPage() {
     sleep,
     sleepGoal: goals.sleepGoal,
   });
+
+  async function saveDailyForm(formToSave: DailyLog, label = "Daily check-in") {
+    const savedDaily: DailyLog = {
+      date: today,
+      weight: Number(formToSave.weight),
+      sleep: Number(formToSave.sleep),
+      water: Number(formToSave.water),
+      snackLevel: formToSave.snackLevel,
+      mood: formToSave.mood,
+      notes: formToSave.notes.trim(),
+    };
+
+    const nextDailyLogs = dailyLogs.some((log) => log.date === today)
+      ? dailyLogs.map((log) => (log.date === today ? savedDaily : log))
+      : [...dailyLogs, savedDaily];
+
+    setDailyLogs(nextDailyLogs);
+    setDailyForm(savedDaily);
+    localStorage.setItem(storageKeys.daily, JSON.stringify(nextDailyLogs));
+
+    if (!userId) {
+      setSyncStatus(`${label} saved locally`);
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+
+      const { error } = await supabase
+        .from("daily_logs")
+        .upsert(dailyToDatabase(savedDaily, userId), {
+          onConflict: "user_id,date",
+        });
+
+      if (error) {
+        setSyncStatus(`${label} saved locally, cloud sync failed: ${error.message}`);
+        return;
+      }
+
+      setSyncStatus(`${label} saved + synced`);
+    } catch {
+      setSyncStatus(`${label} saved locally`);
+    }
+  }
+
+  async function quickAddWater(amount: number) {
+    const nextForm = {
+      ...dailyForm,
+      water: Number((Number(dailyForm.water) + amount).toFixed(2)),
+    };
+
+    setDailyForm(nextForm);
+    await saveDailyForm(nextForm, `Water +${amount}L`);
+  }
 
   async function quickAddFood({
     foodName,
@@ -679,6 +799,108 @@ export default function TodayPage() {
         </section>
 
         <section className="mt-5 rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5">
+          <p className="text-sm text-zinc-400">Daily Check-in</p>
+          <h2 className="mt-1 text-2xl font-black">Baseline today</h2>
+
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <Input
+              label="Weight kg"
+              type="number"
+              step="0.1"
+              value={String(dailyForm.weight)}
+              onChange={(value) =>
+                setDailyForm({ ...dailyForm, weight: Number(value) })
+              }
+            />
+
+            <Input
+              label="Sleep hours"
+              type="number"
+              step="0.5"
+              value={String(dailyForm.sleep)}
+              onChange={(value) =>
+                setDailyForm({ ...dailyForm, sleep: Number(value) })
+              }
+            />
+
+            <Input
+              label="Water liters"
+              type="number"
+              step="0.25"
+              value={String(dailyForm.water)}
+              onChange={(value) =>
+                setDailyForm({ ...dailyForm, water: Number(value) })
+              }
+            />
+
+            <label className="block">
+              <span className="text-xs text-zinc-500">Mood</span>
+              <select
+                value={dailyForm.mood}
+                onChange={(event) =>
+                  setDailyForm({ ...dailyForm, mood: event.target.value })
+                }
+                className="mt-1 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
+              >
+                <option value="great">Great</option>
+                <option value="good">Good</option>
+                <option value="neutral">Neutral</option>
+                <option value="tired">Tired</option>
+                <option value="bad">Bad</option>
+              </select>
+            </label>
+
+            <label className="col-span-2 block">
+              <span className="text-xs text-zinc-500">Snack Level</span>
+              <select
+                value={dailyForm.snackLevel}
+                onChange={(event) =>
+                  setDailyForm({ ...dailyForm, snackLevel: event.target.value })
+                }
+                className="mt-1 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
+              >
+                <option value="none">None</option>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </label>
+          </div>
+
+          <textarea
+            value={dailyForm.notes}
+            onChange={(event) =>
+              setDailyForm({ ...dailyForm, notes: event.target.value })
+            }
+            placeholder="Notes for today"
+            className="mt-3 min-h-20 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
+          />
+
+          <div className="mt-4 grid grid-cols-3 gap-3">
+            <button
+              onClick={() => quickAddWater(0.25)}
+              className="rounded-2xl border border-zinc-800 bg-zinc-950 px-3 py-3 text-sm font-bold text-zinc-200 hover:bg-zinc-900"
+            >
+              +0.25L
+            </button>
+
+            <button
+              onClick={() => quickAddWater(0.5)}
+              className="rounded-2xl border border-zinc-800 bg-zinc-950 px-3 py-3 text-sm font-bold text-zinc-200 hover:bg-zinc-900"
+            >
+              +0.5L
+            </button>
+
+            <button
+              onClick={() => saveDailyForm(dailyForm)}
+              className="rounded-2xl bg-emerald-400 px-3 py-3 text-sm font-black text-zinc-950 hover:bg-emerald-300"
+            >
+              Save
+            </button>
+          </div>
+        </section>
+
+        <section className="mt-5 rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5">
           <p className="text-sm text-zinc-400">Quick Add</p>
           <h2 className="mt-1 text-2xl font-black">Log fast</h2>
 
@@ -831,17 +1053,11 @@ export default function TodayPage() {
             value={`${water}L`}
             goal={`${goals.waterGoal}L`}
             percent={getPercent(water, goals.waterGoal)}
-            href="/"
+            href="/today"
           />
         </section>
 
         <section className="mt-5 grid gap-3">
-          <QuickAction
-            href="/"
-            title="Daily Check-in"
-            description={todayDaily ? "Baseline saved" : "Add weight, sleep, water, mood"}
-          />
-
           <QuickAction
             href="/food"
             title="Open Food"
@@ -942,5 +1158,32 @@ function QuickAction({
       <p className="text-xl font-black">{title}</p>
       <p className="mt-1 text-sm text-zinc-400">{description}</p>
     </Link>
+  );
+}
+
+function Input({
+  label,
+  type,
+  value,
+  onChange,
+  step,
+}: {
+  label: string;
+  type: string;
+  value: string;
+  onChange: (value: string) => void;
+  step?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="text-xs text-zinc-500">{label}</span>
+      <input
+        type={type}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-1 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
+      />
+    </label>
   );
 }

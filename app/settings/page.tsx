@@ -1,15 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import type { ChangeEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import AppNav from "../AppNav";
 import { createClient } from "../../lib/supabase/client";
+import {
+  canSaveWithoutLogin,
+  disableGuestMode,
+  getAuthMode,
+  getSaveLockMessage,
+} from "../../lib/recode/auth-mode";
 
-const storageKeys = {
-  daily: "operation-recode-logs-no-waist",
-  food: "operation-recode-food-logs",
-  workout: "operation-recode-workout-logs",
-  goals: "operation-recode-goals",
-};
+type SaveMode = "loading" | "sync" | "guest" | "locked";
 
 type Goals = {
   targetWeight: number;
@@ -20,13 +23,11 @@ type Goals = {
   workoutGoal: number;
 };
 
-type BackupData = {
-  version: string;
-  exportedAt: string;
-  goals: Goals;
-  daily: unknown[];
-  food: unknown[];
-  workout: unknown[];
+const storageKeys = {
+  goals: "operation-recode-goals",
+  daily: "operation-recode-logs-no-waist",
+  food: "operation-recode-food-logs",
+  workout: "operation-recode-workout-logs",
 };
 
 const defaultGoals: Goals = {
@@ -38,17 +39,6 @@ const defaultGoals: Goals = {
   workoutGoal: 30,
 };
 
-function safeParseArray(value: string | null) {
-  if (!value) return [];
-
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
 function toNumber(value: unknown, fallback: number) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
 
@@ -58,6 +48,17 @@ function toNumber(value: unknown, fallback: number) {
   }
 
   return fallback;
+}
+
+function safeParse(value: string | null) {
+  if (!value) return [];
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 function loadLocalGoals(): Goals {
@@ -96,100 +97,86 @@ function goalsToDatabase(goals: Goals, userId: string) {
   return {
     user_id: userId,
     target_weight: goals.targetWeight,
-    protein_goal: goals.proteinGoal,
-    calorie_goal: goals.calorieGoal,
+    protein_goal: Math.round(goals.proteinGoal),
+    calorie_goal: Math.round(goals.calorieGoal),
     water_goal: goals.waterGoal,
     sleep_goal: goals.sleepGoal,
-    workout_goal: goals.workoutGoal,
+    workout_goal: Math.round(goals.workoutGoal),
     updated_at: new Date().toISOString(),
   };
 }
 
-function createBackup(): BackupData {
-  return {
-    version: "operation-recode-backup-v5",
-    exportedAt: new Date().toISOString(),
-    goals: loadLocalGoals(),
-    daily: safeParseArray(localStorage.getItem(storageKeys.daily)),
-    food: safeParseArray(localStorage.getItem(storageKeys.food)),
-    workout: safeParseArray(localStorage.getItem(storageKeys.workout)),
-  };
-}
-
 export default function SettingsPage() {
-  const [backupText, setBackupText] = useState("");
-  const [importText, setImportText] = useState("");
-  const [status, setStatus] = useState("");
-  const [syncStatus, setSyncStatus] = useState("Checking login...");
-  const [userEmail, setUserEmail] = useState("");
-  const [userId, setUserId] = useState("");
   const [goals, setGoals] = useState<Goals>(defaultGoals);
+  const [saveMode, setSaveMode] = useState<SaveMode>("loading");
+  const [userId, setUserId] = useState("");
+  const [message, setMessage] = useState("Loading settings...");
 
-  const [counts, setCounts] = useState({
-    daily: 0,
-    food: 0,
-    workout: 0,
-  });
+  const canWrite = saveMode === "sync" || saveMode === "guest";
 
-  function refreshCounts() {
-    setCounts({
-      daily: safeParseArray(localStorage.getItem(storageKeys.daily)).length,
-      food: safeParseArray(localStorage.getItem(storageKeys.food)).length,
-      workout: safeParseArray(localStorage.getItem(storageKeys.workout)).length,
-    });
-  }
+  const modeLabel = useMemo(() => {
+    if (saveMode === "sync") return "Sync On";
+    if (saveMode === "guest") return "Guest Mode";
+    if (saveMode === "locked") return "Locked";
+    return "Checking";
+  }, [saveMode]);
 
   useEffect(() => {
     async function loadSettings() {
-      refreshCounts();
-
       const localGoals = loadLocalGoals();
       setGoals(localGoals);
 
       try {
         const supabase = createClient();
-        const { data: userData, error: userError } = await supabase.auth.getUser();
+        const { data } = await supabase.auth.getSession();
+        const currentUser = data.session?.user;
 
-        if (userError || !userData.user) {
-          setSyncStatus("Not logged in. Goals are saved locally only.");
+        if (currentUser) {
+          disableGuestMode();
+          setUserId(currentUser.id);
+          setSaveMode("sync");
+          setMessage("Logged in. Settings can sync with Supabase.");
+
+          const { data: goalData, error } = await supabase
+            .from("goals")
+            .select("*")
+            .eq("user_id", currentUser.id)
+            .maybeSingle();
+
+          if (error) {
+            setMessage(`Cloud goals load failed: ${error.message}`);
+            return;
+          }
+
+          if (goalData) {
+            const cloudGoals = goalsFromDatabase(goalData);
+            setGoals(cloudGoals);
+            localStorage.setItem(storageKeys.goals, JSON.stringify(cloudGoals));
+          }
+
           return;
         }
 
-        setUserEmail(userData.user.email ?? "");
-        setUserId(userData.user.id);
-
-        const { data, error } = await supabase
-          .from("goals")
-          .select("*")
-          .eq("user_id", userData.user.id)
-          .maybeSingle();
-
-        if (error) {
-          setSyncStatus(`Could not load cloud goals: ${error.message}`);
+        if (getAuthMode() === "guest") {
+          setSaveMode("guest");
+          setMessage("Guest Mode. Settings save locally on this device only.");
           return;
         }
 
-        if (data) {
-          const cloudGoals = goalsFromDatabase(data);
-          setGoals(cloudGoals);
-          localStorage.setItem(storageKeys.goals, JSON.stringify(cloudGoals));
-          setSyncStatus("Cloud goals loaded.");
-          return;
-        }
-
-        const { error: insertError } = await supabase
-          .from("goals")
-          .insert(goalsToDatabase(localGoals, userData.user.id));
-
-        if (insertError) {
-          setSyncStatus(`Could not create cloud goals: ${insertError.message}`);
-          return;
-        }
-
-        setSyncStatus("Cloud goals created from local settings.");
+        setSaveMode("locked");
+        setMessage("Settings are locked. Login or use Guest Mode first.");
       } catch (error) {
-        setSyncStatus(
-          error instanceof Error ? error.message : "Could not connect to Supabase."
+        if (getAuthMode() === "guest") {
+          setSaveMode("guest");
+          setMessage("Guest Mode. Settings save locally on this device only.");
+          return;
+        }
+
+        setSaveMode("locked");
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : "Settings are locked. Login or use Guest Mode first."
         );
       }
     }
@@ -197,11 +184,21 @@ export default function SettingsPage() {
     loadSettings();
   }, []);
 
+  function blockIfLocked() {
+    if (canWrite) return false;
+
+    alert(getSaveLockMessage());
+    setMessage("Locked. Login or enable Guest Mode before changing settings.");
+    return true;
+  }
+
   async function saveGoals() {
+    if (blockIfLocked()) return;
+
     localStorage.setItem(storageKeys.goals, JSON.stringify(goals));
 
-    if (!userId) {
-      setStatus("Goals saved locally. Login first to sync to cloud.");
+    if (saveMode === "guest" || !userId) {
+      setMessage("Goals saved locally in Guest Mode.");
       return;
     }
 
@@ -210,128 +207,110 @@ export default function SettingsPage() {
 
       const { error } = await supabase
         .from("goals")
-        .upsert(goalsToDatabase(goals, userId), {
-          onConflict: "user_id",
-        });
+        .upsert(goalsToDatabase(goals, userId), { onConflict: "user_id" });
 
       if (error) {
-        setStatus(`Local saved, but cloud sync failed: ${error.message}`);
+        setMessage(`Saved locally, cloud sync failed: ${error.message}`);
         return;
       }
 
-      setStatus("Goals saved and synced to Supabase.");
-      setSyncStatus("Cloud goals synced.");
+      setMessage("Goals saved and synced.");
     } catch (error) {
-      setStatus(
+      setMessage(
         error instanceof Error
-          ? `Local saved, but cloud sync failed: ${error.message}`
-          : "Local saved, but cloud sync failed."
+          ? `Saved locally, cloud sync failed: ${error.message}`
+          : "Saved locally, cloud sync failed."
       );
     }
   }
 
-  async function resetGoals() {
-    setGoals(defaultGoals);
-    localStorage.setItem(storageKeys.goals, JSON.stringify(defaultGoals));
+  function exportBackup() {
+    const backup = {
+      version: "operation-recode-backup-v6",
+      exportedAt: new Date().toISOString(),
+      saveMode,
+      goals,
+      dailyLogs: safeParse(localStorage.getItem(storageKeys.daily)),
+      foodLogs: safeParse(localStorage.getItem(storageKeys.food)),
+      workoutLogs: safeParse(localStorage.getItem(storageKeys.workout)),
+    };
 
-    if (userId) {
-      try {
-        const supabase = createClient();
+    const blob = new Blob([JSON.stringify(backup, null, 2)], {
+      type: "application/json",
+    });
 
-        await supabase.from("goals").upsert(goalsToDatabase(defaultGoals, userId), {
-          onConflict: "user_id",
-        });
-      } catch {
-        // local reset is enough if cloud fails
-      }
-    }
-
-    setStatus("Goals reset to default.");
-  }
-
-  function generateBackup() {
-    const backup = createBackup();
-    const text = JSON.stringify(backup, null, 2);
-
-    setBackupText(text);
-    setStatus("Backup generated. Copy it or download the file.");
-  }
-
-  function downloadBackup() {
-    const backup = createBackup();
-    const text = JSON.stringify(backup, null, 2);
-    const blob = new Blob([text], { type: "application/json" });
     const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
 
-    const fileName = `operation-recode-backup-${new Date()
+    link.href = url;
+    link.download = `operation-recode-backup-${new Date()
       .toISOString()
       .slice(0, 10)}.json`;
 
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = fileName;
+    document.body.appendChild(link);
     link.click();
+    link.remove();
 
     URL.revokeObjectURL(url);
-    setStatus(`Downloaded ${fileName}`);
+    setMessage("Backup exported.");
   }
 
-  async function copyBackup() {
-    const text = backupText || JSON.stringify(createBackup(), null, 2);
-
-    try {
-      await navigator.clipboard.writeText(text);
-      setBackupText(text);
-      setStatus("Backup copied to clipboard.");
-    } catch {
-      setBackupText(text);
-      setStatus("Could not copy automatically. Select the text and copy manually.");
-    }
-  }
-
-  function importBackup() {
-    if (!importText.trim()) {
-      alert("Paste backup JSON first.");
+  function importBackup(event: ChangeEvent<HTMLInputElement>) {
+    if (blockIfLocked()) {
+      event.target.value = "";
       return;
     }
 
-    try {
-      const parsed = JSON.parse(importText) as Partial<BackupData>;
+    const file = event.target.files?.[0];
 
-      if (!Array.isArray(parsed.daily)) throw new Error("Missing daily data");
-      if (!Array.isArray(parsed.food)) throw new Error("Missing food data");
-      if (!Array.isArray(parsed.workout)) throw new Error("Missing workout data");
+    if (!file) return;
 
-      localStorage.setItem(storageKeys.daily, JSON.stringify(parsed.daily));
-      localStorage.setItem(storageKeys.food, JSON.stringify(parsed.food));
-      localStorage.setItem(storageKeys.workout, JSON.stringify(parsed.workout));
+    const reader = new FileReader();
 
-      if (parsed.goals) {
-        const importedGoals: Goals = {
-          targetWeight: toNumber(parsed.goals.targetWeight, defaultGoals.targetWeight),
-          proteinGoal: toNumber(parsed.goals.proteinGoal, defaultGoals.proteinGoal),
-          calorieGoal: toNumber(parsed.goals.calorieGoal, defaultGoals.calorieGoal),
-          waterGoal: toNumber(parsed.goals.waterGoal, defaultGoals.waterGoal),
-          sleepGoal: toNumber(parsed.goals.sleepGoal, defaultGoals.sleepGoal),
-          workoutGoal: toNumber(parsed.goals.workoutGoal, defaultGoals.workoutGoal),
-        };
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result)) as Record<string, unknown>;
 
-        localStorage.setItem(storageKeys.goals, JSON.stringify(importedGoals));
-        setGoals(importedGoals);
+        if (parsed.goals && typeof parsed.goals === "object") {
+          const importedGoals = {
+            ...defaultGoals,
+            ...(parsed.goals as Partial<Goals>),
+          };
+
+          setGoals(importedGoals);
+          localStorage.setItem(storageKeys.goals, JSON.stringify(importedGoals));
+        }
+
+        if (Array.isArray(parsed.dailyLogs)) {
+          localStorage.setItem(storageKeys.daily, JSON.stringify(parsed.dailyLogs));
+        }
+
+        if (Array.isArray(parsed.foodLogs)) {
+          localStorage.setItem(storageKeys.food, JSON.stringify(parsed.foodLogs));
+        }
+
+        if (Array.isArray(parsed.workoutLogs)) {
+          localStorage.setItem(
+            storageKeys.workout,
+            JSON.stringify(parsed.workoutLogs)
+          );
+        }
+
+        setMessage("Backup imported locally. Press Save Goals if you changed goals.");
+      } catch {
+        setMessage("Import failed. File format is not valid.");
       }
+    };
 
-      refreshCounts();
-      setStatus(
-        "Backup imported locally. Press Save Goals if you want to sync imported goals."
-      );
-    } catch {
-      alert("Invalid backup JSON. Check the text and try again.");
-    }
+    reader.readAsText(file);
+    event.target.value = "";
   }
 
-  function clearAllData() {
+  function clearLocalLogs() {
+    if (blockIfLocked()) return;
+
     const confirmed = confirm(
-      "Clear all Operation: Recode local data? This deletes Daily, Food, and Workout logs from this browser only."
+      "Clear local daily, food, and workout logs on this browser?"
     );
 
     if (!confirmed) return;
@@ -340,260 +319,252 @@ export default function SettingsPage() {
     localStorage.removeItem(storageKeys.food);
     localStorage.removeItem(storageKeys.workout);
 
-    setBackupText("");
-    setImportText("");
-    refreshCounts();
-    setStatus("All local data cleared. Cloud data and Goals were not deleted.");
+    setMessage("Local logs cleared. Goals are kept.");
   }
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-white">
-      <section className="mx-auto min-h-screen w-full max-w-7xl px-5 py-6 md:px-8">
+    <main className="min-h-screen text-white">
+      <section className="recode-shell mx-auto min-h-screen w-full max-w-7xl px-5 py-6 md:px-8">
         <AppNav />
 
-        <nav className="mb-8 flex items-center justify-between gap-4">
+        <section className="mb-8 flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
           <div>
-            <p className="text-xs uppercase tracking-[0.35em] text-emerald-400">
-              Operation: Recode
-            </p>
-            <h1 className="mt-2 text-3xl font-black tracking-tight md:text-6xl">
-              Settings.
-              <br />
-              Sync the goals.
+            <p className="recode-kicker">Operation: Recode</p>
+            <h1 className="mt-3 text-5xl font-black tracking-tight md:text-7xl">
+              Settings
             </h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400 md:text-base">
+              Goals, backup, and data controls. Saving follows your Account mode.
+            </p>
           </div>
 
-          <div className="rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-zinc-300">
-            Settings / v0.5
-          </div>
-        </nav>
+          <ModeBadge mode={saveMode} />
+        </section>
 
-        <section className="mb-5 rounded-3xl border border-emerald-400/30 bg-emerald-400/10 p-5">
-          <p className="text-sm text-emerald-300">Supabase Sync</p>
-          <p className="mt-2 text-2xl font-black">
-            {userEmail ? `Logged in: ${userEmail}` : "Not logged in"}
-          </p>
-          <p className="mt-2 text-sm leading-6 text-zinc-300">{syncStatus}</p>
+        <section className="mb-5 rounded-3xl border border-white/10 bg-white/[0.04] p-5 text-sm font-bold text-zinc-300">
+          {message}
+        </section>
 
-          {!userEmail && (
-            <a
+        {saveMode === "locked" && (
+          <section className="mb-5 rounded-[2rem] border border-red-400/25 bg-red-400/10 p-5">
+            <p className="text-sm font-black text-red-200">Saving Locked</p>
+            <p className="mt-2 text-sm leading-6 text-zinc-300">
+              You need to login or continue as Guest Mode before changing goals,
+              importing backup, or clearing data.
+            </p>
+
+            <Link
               href="/login"
-              className="mt-4 inline-block rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-black text-zinc-950 hover:bg-emerald-300"
+              className="mt-4 inline-block rounded-2xl bg-red-400 px-5 py-3 text-sm font-black text-zinc-950"
             >
-              Go to Login
-            </a>
-          )}
-        </section>
-
-        <section className="grid gap-5 md:grid-cols-3 xl:grid-cols-6">
-          <StatCard label="Target Weight" value={`${goals.targetWeight} kg`} />
-          <StatCard label="Protein Goal" value={`${goals.proteinGoal}g`} />
-          <StatCard label="Calorie Goal" value={`${goals.calorieGoal} kcal`} />
-          <StatCard label="Water Goal" value={`${goals.waterGoal}L`} />
-          <StatCard label="Sleep Goal" value={`${goals.sleepGoal}h`} />
-          <StatCard label="Workout Goal" value={`${goals.workoutGoal} min`} />
-        </section>
-
-        <section className="mt-5 rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
-          <p className="text-sm text-zinc-400">Goals</p>
-          <h2 className="mt-1 text-2xl font-bold">Set your targets</h2>
-
-          <div className="mt-5 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
-            <Input
-              label="Target Weight (kg)"
-              type="number"
-              step="0.1"
-              value={String(goals.targetWeight)}
-              onChange={(value) =>
-                setGoals({ ...goals, targetWeight: Number(value) })
-              }
-            />
-
-            <Input
-              label="Protein Goal (g)"
-              type="number"
-              value={String(goals.proteinGoal)}
-              onChange={(value) =>
-                setGoals({ ...goals, proteinGoal: Number(value) })
-              }
-            />
-
-            <Input
-              label="Calorie Goal (kcal/day)"
-              type="number"
-              value={String(goals.calorieGoal)}
-              onChange={(value) =>
-                setGoals({ ...goals, calorieGoal: Number(value) })
-              }
-            />
-
-            <Input
-              label="Water Goal (L)"
-              type="number"
-              step="0.1"
-              value={String(goals.waterGoal)}
-              onChange={(value) =>
-                setGoals({ ...goals, waterGoal: Number(value) })
-              }
-            />
-
-            <Input
-              label="Sleep Goal (hours)"
-              type="number"
-              step="0.1"
-              value={String(goals.sleepGoal)}
-              onChange={(value) =>
-                setGoals({ ...goals, sleepGoal: Number(value) })
-              }
-            />
-
-            <Input
-              label="Workout Goal (min/day)"
-              type="number"
-              value={String(goals.workoutGoal)}
-              onChange={(value) =>
-                setGoals({ ...goals, workoutGoal: Number(value) })
-              }
-            />
-          </div>
-
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <button
-              onClick={saveGoals}
-              className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-black text-zinc-950 hover:bg-emerald-300"
-            >
-              Save Goals + Sync
-            </button>
-
-            <button
-              onClick={resetGoals}
-              className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-200 hover:bg-zinc-800"
-            >
-              Reset Default Goals
-            </button>
-          </div>
-        </section>
-
-        <section className="mt-5 grid gap-5 md:grid-cols-3">
-          <StatCard label="Daily Logs" value={String(counts.daily)} />
-          <StatCard label="Food Logs" value={String(counts.food)} />
-          <StatCard label="Workout Logs" value={String(counts.workout)} />
-        </section>
-
-        <section className="mt-5 grid gap-5 xl:grid-cols-2">
-          <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
-            <p className="text-sm text-zinc-400">Backup</p>
-            <h2 className="mt-1 text-2xl font-bold">Export local data</h2>
-
-            <p className="mt-3 text-sm leading-6 text-zinc-400">
-              This still backs up local browser data. Cloud sync for logs comes in the next step.
-            </p>
-
-            <div className="mt-5 grid gap-3 md:grid-cols-3">
-              <button
-                onClick={generateBackup}
-                className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-200 hover:bg-zinc-800"
-              >
-                Generate
-              </button>
-
-              <button
-                onClick={copyBackup}
-                className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-200 hover:bg-zinc-800"
-              >
-                Copy
-              </button>
-
-              <button
-                onClick={downloadBackup}
-                className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-black text-zinc-950 hover:bg-emerald-300"
-              >
-                Download
-              </button>
-            </div>
-
-            <textarea
-              value={backupText}
-              onChange={(event) => setBackupText(event.target.value)}
-              placeholder="Backup JSON will appear here"
-              className="mt-4 min-h-80 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 font-mono text-xs leading-5 text-zinc-300 outline-none focus:border-emerald-400"
-            />
-          </div>
-
-          <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
-            <p className="text-sm text-zinc-400">Restore</p>
-            <h2 className="mt-1 text-2xl font-bold">Import local backup</h2>
-
-            <p className="mt-3 text-sm leading-6 text-zinc-400">
-              Paste backup JSON here. Importing replaces local browser data only for now.
-            </p>
-
-            <textarea
-              value={importText}
-              onChange={(event) => setImportText(event.target.value)}
-              placeholder="Paste backup JSON here"
-              className="mt-5 min-h-80 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 font-mono text-xs leading-5 text-zinc-300 outline-none focus:border-emerald-400"
-            />
-
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <button
-                onClick={importBackup}
-                className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-black text-zinc-950 hover:bg-emerald-300"
-              >
-                Import Backup
-              </button>
-
-              <button
-                onClick={clearAllData}
-                className="rounded-2xl border border-red-900/70 bg-red-950/40 px-4 py-3 text-sm font-bold text-red-300 hover:bg-red-950"
-              >
-                Clear Local Logs
-              </button>
-            </div>
-          </div>
-        </section>
-
-        {status && (
-          <section className="mt-5 rounded-3xl border border-emerald-400/30 bg-emerald-400/10 p-5 text-sm text-emerald-200">
-            {status}
+              Open Account
+            </Link>
           </section>
         )}
+
+        <section className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+          <section className="recode-card rounded-[2rem] p-6 md:p-8">
+            <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+              <div>
+                <p className="text-sm font-black uppercase tracking-[0.25em] text-zinc-500">
+                  Goals
+                </p>
+                <h2 className="mt-3 text-3xl font-black tracking-tight">
+                  Target settings
+                </h2>
+              </div>
+
+              <button
+                onClick={saveGoals}
+                className={
+                  canWrite
+                    ? "recode-button-primary"
+                    : "rounded-2xl border border-red-400/25 bg-red-400/10 px-5 py-3 text-sm font-black text-red-200"
+                }
+              >
+                {canWrite ? "Save Goals" : "Locked"}
+              </button>
+            </div>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              <NumberField
+                label="Target Weight (kg)"
+                value={goals.targetWeight}
+                step="0.1"
+                onChange={(value) =>
+                  setGoals({ ...goals, targetWeight: Number(value) })
+                }
+              />
+
+              <NumberField
+                label="Protein Goal (g)"
+                value={goals.proteinGoal}
+                step="1"
+                onChange={(value) =>
+                  setGoals({ ...goals, proteinGoal: Number(value) })
+                }
+              />
+
+              <NumberField
+                label="Calorie Goal (kcal)"
+                value={goals.calorieGoal}
+                step="10"
+                onChange={(value) =>
+                  setGoals({ ...goals, calorieGoal: Number(value) })
+                }
+              />
+
+              <NumberField
+                label="Water Goal (L)"
+                value={goals.waterGoal}
+                step="0.25"
+                onChange={(value) =>
+                  setGoals({ ...goals, waterGoal: Number(value) })
+                }
+              />
+
+              <NumberField
+                label="Sleep Goal (hours)"
+                value={goals.sleepGoal}
+                step="0.5"
+                onChange={(value) =>
+                  setGoals({ ...goals, sleepGoal: Number(value) })
+                }
+              />
+
+              <NumberField
+                label="Workout Goal (minutes)"
+                value={goals.workoutGoal}
+                step="5"
+                onChange={(value) =>
+                  setGoals({ ...goals, workoutGoal: Number(value) })
+                }
+              />
+            </div>
+          </section>
+
+          <section className="space-y-5">
+            <section className="recode-card rounded-[2rem] p-6">
+              <p className="text-sm font-black uppercase tracking-[0.25em] text-zinc-500">
+                Backup
+              </p>
+
+              <h2 className="mt-3 text-3xl font-black tracking-tight">
+                Export / Import
+              </h2>
+
+              <p className="mt-3 text-sm leading-6 text-zinc-400">
+                Export is always available. Import changes local data, so it is
+                blocked when save mode is Locked.
+              </p>
+
+              <div className="mt-6 grid gap-3">
+                <button onClick={exportBackup} className="recode-button-primary">
+                  Export Backup
+                </button>
+
+                <label
+                  className={
+                    canWrite
+                      ? "recode-button-ghost cursor-pointer text-center"
+                      : "cursor-not-allowed rounded-2xl border border-red-400/25 bg-red-400/10 px-5 py-3 text-center text-sm font-black text-red-200"
+                  }
+                >
+                  Import Backup
+                  <input
+                    type="file"
+                    accept="application/json"
+                    onChange={importBackup}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </section>
+
+            <section className="rounded-[2rem] border border-red-400/20 bg-red-400/10 p-6">
+              <p className="text-sm font-black uppercase tracking-[0.25em] text-red-200">
+                Danger
+              </p>
+
+              <h2 className="mt-3 text-3xl font-black tracking-tight">
+                Clear local logs
+              </h2>
+
+              <p className="mt-3 text-sm leading-6 text-zinc-300">
+                This clears daily, food, and workout logs stored on this browser.
+                Goals are kept.
+              </p>
+
+              <button
+                onClick={clearLocalLogs}
+                className={
+                  canWrite
+                    ? "mt-6 rounded-2xl bg-red-400 px-5 py-3 text-sm font-black text-zinc-950 hover:bg-red-300"
+                    : "mt-6 rounded-2xl border border-red-400/25 bg-red-400/10 px-5 py-3 text-sm font-black text-red-200"
+                }
+              >
+                {canWrite ? "Clear Local Logs" : "Locked"}
+              </button>
+            </section>
+          </section>
+        </section>
       </section>
     </main>
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
+function ModeBadge({ mode }: { mode: SaveMode }) {
+  if (mode === "sync") {
+    return (
+      <div className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-4 py-2 text-sm font-black text-emerald-200">
+        ● Sync On
+      </div>
+    );
+  }
+
+  if (mode === "guest") {
+    return (
+      <div className="rounded-full border border-amber-400/25 bg-amber-400/10 px-4 py-2 text-sm font-black text-amber-200">
+        ● Guest Mode
+      </div>
+    );
+  }
+
+  if (mode === "locked") {
+    return (
+      <div className="rounded-full border border-red-400/25 bg-red-400/10 px-4 py-2 text-sm font-black text-red-200">
+        ● Locked
+      </div>
+    );
+  }
+
   return (
-    <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5">
-      <p className="text-sm text-zinc-400">{label}</p>
-      <p className="mt-3 text-3xl font-black md:text-4xl">{value}</p>
+    <div className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-black text-zinc-400">
+      Checking...
     </div>
   );
 }
 
-function Input({
+function NumberField({
   label,
-  type,
   value,
-  onChange,
   step,
+  onChange,
 }: {
   label: string;
-  type: string;
-  value: string;
+  value: number;
+  step: string;
   onChange: (value: string) => void;
-  step?: string;
 }) {
   return (
     <label className="block">
-      <span className="text-xs text-zinc-500">{label}</span>
+      <span className="recode-label">{label}</span>
       <input
-        type={type}
+        type="number"
         step={step}
-        value={value}
+        value={String(value)}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-1 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
+        className="recode-input"
       />
     </label>
   );

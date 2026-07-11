@@ -11,6 +11,7 @@ const links = [
   { href: "/coach", label: "Coach" },
   { href: "/progress", label: "Progress" },
   { href: "/settings", label: "Settings" },
+  { href: "/install", label: "Install" },
   { href: "/login", label: "Account" },
 ];
 

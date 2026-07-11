@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const links = [
@@ -10,43 +11,45 @@ const links = [
   { href: "/coach", label: "Coach" },
   { href: "/progress", label: "Progress" },
   { href: "/settings", label: "Settings" },
-  { href: "/login", label: "Login" },
+  { href: "/login", label: "Account" },
 ];
 
 export default function AppNav() {
   const pathname = usePathname();
 
-  function isActive(href: string) {
-    if (href === "/") return pathname === "/";
-    return pathname.startsWith(href);
-  }
-
   return (
-    <div className="mb-8 flex flex-wrap items-center gap-3 rounded-3xl border border-zinc-800 bg-zinc-900/80 p-3">
-      {links.map((link) => {
-        const active = isActive(link.href);
+    <header className="sticky top-0 z-50 -mx-5 mb-6 border-b border-zinc-800/80 bg-zinc-950/90 px-5 py-3 backdrop-blur md:-mx-8 md:px-8">
+      <div className="mx-auto flex w-full max-w-7xl items-center gap-3 overflow-x-auto pb-1">
+        <Link
+          href="/"
+          className="mr-1 shrink-0 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-sm font-black text-emerald-300"
+        >
+          Recode
+        </Link>
 
-        return (
-          <a
-            key={link.href}
-            href={link.href}
-            className={
-              active
-                ? "rounded-2xl bg-emerald-400 px-4 py-2 text-sm font-black text-zinc-950 hover:bg-emerald-300"
-                : "rounded-2xl px-4 py-2 text-sm font-bold text-zinc-300 hover:bg-zinc-800 hover:text-white"
-            }
-          >
-            {link.label}
-          </a>
-        );
-      })}
+        <nav className="flex min-w-max items-center gap-2">
+          {links.map((link) => {
+            const isActive =
+              link.href === "/"
+                ? pathname === "/"
+                : pathname.startsWith(link.href);
 
-      <a
-        href="/"
-        className="ml-auto rounded-2xl border border-zinc-800 px-4 py-2 text-sm font-black text-emerald-400"
-      >
-        Operation: Recode
-      </a>
-    </div>
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={
+                  isActive
+                    ? "shrink-0 rounded-2xl bg-emerald-400 px-4 py-2 text-sm font-black text-zinc-950"
+                    : "shrink-0 rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-bold text-zinc-300 hover:bg-zinc-800"
+                }
+              >
+                {link.label}
+              </Link>
+            );
+          })}
+        </nav>
+      </div>
+    </header>
   );
 }

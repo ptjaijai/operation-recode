@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import AppNav from "../AppNav";
-import DateMenu from "../DateMenu";
+import { createClient } from "../../lib/supabase/client";
 
 type WorkoutType =
   | "badminton"
@@ -20,49 +20,52 @@ type WorkoutLog = {
   date: string;
   type: WorkoutType;
   durationMinutes: number;
-
-  playType?: BadmintonPlayType;
-  gamesPlayed?: number;
-
-  pushupSets?: number;
-  pushupReps?: number;
-
-  squatSets?: number;
-  squatReps?: number;
-
-  plankSets?: number;
-  plankMinutes?: number;
-
-  sidePlankLeftSets?: number;
-  sidePlankLeftMinutes?: number;
-
-  sidePlankRightSets?: number;
-  sidePlankRightMinutes?: number;
-
-  supermanSets?: number;
-  supermanReps?: number;
-
-  lungeSets?: number;
-  lungeReps?: number;
-
-  leftLungeSets?: number;
-  leftLungeReps?: number;
-
-  rightLungeSets?: number;
-  rightLungeReps?: number;
-
-  mountainClimberSets?: number;
-  mountainClimberReps?: number;
-
-  steps?: number;
-  distanceKm?: number;
-
-  swimmingMeters?: number;
-  swimmingLaps?: number;
-
-  otherName?: string;
+  estimatedCalories: number;
+  playType: BadmintonPlayType;
+  gamesPlayed: number;
+  steps: number;
+  distanceKm: number;
+  swimmingMeters: number;
+  laps: number;
+  pushupSets: number;
+  pushupReps: number;
+  squatSets: number;
+  squatReps: number;
+  plankSets: number;
+  plankMinutes: number;
   notes: string;
 };
+
+type Goals = {
+  targetWeight: number;
+  proteinGoal: number;
+  calorieGoal: number;
+  waterGoal: number;
+  sleepGoal: number;
+  workoutGoal: number;
+};
+
+type DailyLog = {
+  date: string;
+  weight: number;
+};
+
+const storageKeys = {
+  workout: "operation-recode-workout-logs",
+  goals: "operation-recode-goals",
+  daily: "operation-recode-logs-no-waist",
+};
+
+const defaultGoals: Goals = {
+  targetWeight: 60,
+  proteinGoal: 120,
+  calorieGoal: 1800,
+  waterGoal: 2,
+  sleepGoal: 7,
+  workoutGoal: 30,
+};
+
+const defaultBodyWeight = 70;
 
 function getLocalDateString(date = new Date()) {
   const year = date.getFullYear();
@@ -74,372 +77,94 @@ function getLocalDateString(date = new Date()) {
 
 const today = getLocalDateString();
 
-function createDefaultForm(date: string): WorkoutLog {
-  return {
-    id: crypto.randomUUID(),
-    date,
-    type: "badminton",
-    durationMinutes: 180,
-    playType: "match",
-    gamesPlayed: 0,
+function isUuid(value: unknown) {
+  if (typeof value !== "string") return false;
 
-    pushupSets: 3,
-    pushupReps: 10,
-
-    squatSets: 3,
-    squatReps: 15,
-
-    plankSets: 3,
-    plankMinutes: 0.5,
-
-    sidePlankLeftSets: 0,
-    sidePlankLeftMinutes: 0,
-
-    sidePlankRightSets: 0,
-    sidePlankRightMinutes: 0,
-
-    supermanSets: 0,
-    supermanReps: 0,
-
-    lungeSets: 0,
-    lungeReps: 0,
-
-    leftLungeSets: 0,
-    leftLungeReps: 0,
-
-    rightLungeSets: 0,
-    rightLungeReps: 0,
-
-    mountainClimberSets: 0,
-    mountainClimberReps: 0,
-
-    steps: 0,
-    distanceKm: 0,
-    swimmingMeters: 0,
-    swimmingLaps: 0,
-    otherName: "",
-    notes: "",
-  };
-}
-
-function getWorkoutLabel(type: WorkoutType) {
-  if (type === "badminton") return "Badminton";
-  if (type === "home-workout") return "Home Workout";
-  if (type === "walking") return "Walking";
-  if (type === "running") return "Running";
-  if (type === "swimming") return "Swimming";
-  if (type === "stretching") return "Stretching";
-  return "Other";
-}
-
-function getPlayTypeLabel(type?: BadmintonPlayType) {
-  if (type === "casual") return "ตีเล่น";
-  if (type === "practice") return "ซ้อม";
-  if (type === "match") return "เล่นเกมจริง";
-  return "-";
-}
-
-function getDefaultDuration(type: WorkoutType) {
-  if (type === "badminton") return 180;
-  if (type === "home-workout") return 20;
-  if (type === "walking") return 30;
-  if (type === "running") return 30;
-  if (type === "swimming") return 30;
-  if (type === "stretching") return 15;
-  return 30;
-}
-
-function getDurationScore(type: WorkoutType, minutes: number) {
-  if (type === "badminton") {
-    if (minutes >= 180) return 100;
-    if (minutes >= 120) return 85;
-    if (minutes >= 60) return 65;
-    if (minutes >= 30) return 40;
-    return 20;
-  }
-
-  if (type === "home-workout") {
-    if (minutes >= 30) return 100;
-    if (minutes >= 20) return 80;
-    if (minutes >= 15) return 60;
-    if (minutes >= 10) return 40;
-    return 20;
-  }
-
-  if (type === "walking") {
-    if (minutes >= 60) return 100;
-    if (minutes >= 45) return 85;
-    if (minutes >= 30) return 70;
-    if (minutes >= 15) return 45;
-    return 20;
-  }
-
-  if (type === "running") {
-    if (minutes >= 45) return 100;
-    if (minutes >= 30) return 80;
-    if (minutes >= 20) return 60;
-    if (minutes >= 10) return 35;
-    return 20;
-  }
-
-  if (type === "swimming") {
-    if (minutes >= 45) return 100;
-    if (minutes >= 30) return 80;
-    if (minutes >= 20) return 60;
-    if (minutes >= 10) return 35;
-    return 20;
-  }
-
-  if (type === "stretching") {
-    if (minutes >= 20) return 100;
-    if (minutes >= 15) return 80;
-    if (minutes >= 10) return 60;
-    return 30;
-  }
-
-  if (minutes >= 45) return 100;
-  if (minutes >= 30) return 80;
-  if (minutes >= 15) return 55;
-  return 25;
-}
-
-function getExerciseTotal(sets?: number, reps?: number) {
-  return Number(sets ?? 0) * Number(reps ?? 0);
-}
-
-function getPlankTotalMinutes(sets?: number, minutes?: number) {
-  return Number(sets ?? 0) * Number(minutes ?? 0);
-}
-
-function getAllPlankMinutes(log: WorkoutLog) {
-  return (
-    getPlankTotalMinutes(log.plankSets, log.plankMinutes) +
-    getPlankTotalMinutes(log.sidePlankLeftSets, log.sidePlankLeftMinutes) +
-    getPlankTotalMinutes(log.sidePlankRightSets, log.sidePlankRightMinutes)
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value
   );
 }
 
-function getAllLunges(log: WorkoutLog) {
-  return (
-    getExerciseTotal(log.lungeSets, log.lungeReps) +
-    getExerciseTotal(log.leftLungeSets, log.leftLungeReps) +
-    getExerciseTotal(log.rightLungeSets, log.rightLungeReps)
-  );
+function toNumber(value: unknown, fallback: number) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  return fallback;
 }
 
-function getHomeWorkoutVolume(log: WorkoutLog) {
-  const pushups = getExerciseTotal(log.pushupSets, log.pushupReps);
-  const squats = getExerciseTotal(log.squatSets, log.squatReps);
-  const superman = getExerciseTotal(log.supermanSets, log.supermanReps);
-  const lunges = getAllLunges(log);
-  const mountainClimbers = getExerciseTotal(
-    log.mountainClimberSets,
-    log.mountainClimberReps
-  );
-  const plankMinutes = getAllPlankMinutes(log);
+function safeParseArray<T>(value: string | null): T[] {
+  if (!value) return [];
 
-  return (
-    pushups +
-    squats +
-    superman +
-    lunges +
-    Math.floor(mountainClimbers / 2) +
-    plankMinutes * 10
-  );
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
-function getWorkoutScore(log: WorkoutLog) {
-  const durationScore = getDurationScore(log.type, log.durationMinutes);
+function loadGoals(): Goals {
+  const saved = localStorage.getItem(storageKeys.goals);
 
-  if (log.type === "badminton") {
-    const gameBonus = Math.min((log.gamesPlayed ?? 0) * 3, 15);
-    const playBonus =
-      log.playType === "match" ? 15 : log.playType === "practice" ? 8 : 0;
+  if (!saved) return defaultGoals;
 
-    return Math.min(100, Math.round(durationScore * 0.75 + gameBonus + playBonus));
+  try {
+    const parsed = JSON.parse(saved) as Partial<Goals>;
+
+    return {
+      targetWeight: toNumber(parsed.targetWeight, defaultGoals.targetWeight),
+      proteinGoal: toNumber(parsed.proteinGoal, defaultGoals.proteinGoal),
+      calorieGoal: toNumber(parsed.calorieGoal, defaultGoals.calorieGoal),
+      waterGoal: toNumber(parsed.waterGoal, defaultGoals.waterGoal),
+      sleepGoal: toNumber(parsed.sleepGoal, defaultGoals.sleepGoal),
+      workoutGoal: toNumber(parsed.workoutGoal, defaultGoals.workoutGoal),
+    };
+  } catch {
+    return defaultGoals;
   }
-
-  if (log.type === "home-workout") {
-    const volume = getHomeWorkoutVolume(log);
-
-    const strengthScore =
-      volume >= 180
-        ? 100
-        : volume >= 120
-        ? 85
-        : volume >= 75
-        ? 70
-        : volume >= 40
-        ? 50
-        : volume > 0
-        ? 30
-        : 0;
-
-    return Math.round(strengthScore * 0.7 + durationScore * 0.3);
-  }
-
-  if (log.type === "walking") {
-    const steps = log.steps ?? 0;
-
-    const stepScore =
-      steps >= 10000
-        ? 100
-        : steps >= 8000
-        ? 85
-        : steps >= 5000
-        ? 65
-        : steps >= 3000
-        ? 45
-        : steps > 0
-        ? 25
-        : 0;
-
-    return steps > 0
-      ? Math.round(stepScore * 0.65 + durationScore * 0.35)
-      : durationScore;
-  }
-
-  if (log.type === "running") {
-    const distance = log.distanceKm ?? 0;
-
-    const distanceScore =
-      distance >= 8
-        ? 100
-        : distance >= 5
-        ? 85
-        : distance >= 3
-        ? 65
-        : distance >= 1.5
-        ? 45
-        : distance > 0
-        ? 25
-        : 0;
-
-    return distance > 0
-      ? Math.round(distanceScore * 0.7 + durationScore * 0.3)
-      : durationScore;
-  }
-
-  if (log.type === "swimming") {
-    const meters = log.swimmingMeters ?? 0;
-    const laps = log.swimmingLaps ?? 0;
-
-    const meterScore =
-      meters >= 1500
-        ? 100
-        : meters >= 1000
-        ? 85
-        : meters >= 500
-        ? 65
-        : meters >= 200
-        ? 45
-        : meters > 0
-        ? 25
-        : 0;
-
-    const lapScore =
-      laps >= 40
-        ? 100
-        : laps >= 25
-        ? 80
-        : laps >= 15
-        ? 60
-        : laps >= 5
-        ? 35
-        : laps > 0
-        ? 20
-        : 0;
-
-    if (meters > 0) return Math.round(meterScore * 0.75 + durationScore * 0.25);
-    if (laps > 0) return Math.round(lapScore * 0.7 + durationScore * 0.3);
-
-    return durationScore;
-  }
-
-  return durationScore;
 }
 
-function getCoachMessage(logs: WorkoutLog[]) {
-  if (logs.length === 0) {
-    return "วันนี้ยังไม่มี workout log ถ้าไม่ได้ตีแบด ให้ทำ Home Workout 15–20 นาทีพอ: push-up, squat, plank";
-  }
+function loadDailyLogs(): DailyLog[] {
+  const saved = localStorage.getItem(storageKeys.daily);
+  const parsed = safeParseArray<Record<string, unknown>>(saved);
 
-  const totalMinutes = logs.reduce((sum, log) => sum + log.durationMinutes, 0);
-  const hasBadminton = logs.some((log) => log.type === "badminton");
-  const hasHomeWorkout = logs.some((log) => log.type === "home-workout");
-  const hasWalking = logs.some((log) => log.type === "walking");
-  const hasRunning = logs.some((log) => log.type === "running");
-  const hasSwimming = logs.some((log) => log.type === "swimming");
-
-  if (hasBadminton && totalMinutes >= 180) {
-    return "วันนี้ตีแบดเยอะมาก พอแล้ว ไม่ต้องเพิ่มคาร์ดิโออีก โฟกัสน้ำ โปรตีน และนอนให้พอ";
-  }
-
-  if ((hasBadminton || hasRunning || hasSwimming) && !hasHomeWorkout) {
-    return "วันนี้คาร์ดิโอดีแล้ว แต่ถ้าอยากลดแล้วหุ่นชัดขึ้น เพิ่ม Home Workout สั้น ๆ 2–3 วันต่อสัปดาห์จะช่วยรักษากล้าม";
-  }
-
-  if (hasHomeWorkout) {
-    return "ดีมาก วันนี้มีแรงต้านแล้ว นี่คือส่วนสำคัญที่จะทำให้ลดน้ำหนักแล้วไม่โทรม";
-  }
-
-  if (hasWalking) {
-    return "วันนี้มี Walking แล้ว ดีมากสำหรับวันเบา ๆ ช่วยเผาผลาญโดยไม่ล้าหนัก";
-  }
-
-  return "วันนี้ขยับแล้ว ถือว่าดี เป้าหมายคือความสม่ำเสมอ ไม่ใช่ทำหนักจนพัง";
+  return parsed
+    .map((item) => ({
+      date: typeof item.date === "string" ? item.date : today,
+      weight:
+        typeof item.weight === "number"
+          ? item.weight
+          : typeof item.weightKg === "number"
+          ? item.weightKg
+          : 0,
+    }))
+    .filter((item) => item.weight > 0);
 }
 
-function getWorkoutDetail(log: WorkoutLog) {
-  if (log.type === "badminton") {
-    return `${getPlayTypeLabel(log.playType)} / ${log.gamesPlayed ?? 0} games`;
-  }
+function formatDateForMenu(dateString: string) {
+  if (!dateString) return "";
 
-  if (log.type === "home-workout") {
-    const pushups = getExerciseTotal(log.pushupSets, log.pushupReps);
-    const squats = getExerciseTotal(log.squatSets, log.squatReps);
-    const plank = getPlankTotalMinutes(log.plankSets, log.plankMinutes);
-    const sideLeft = getPlankTotalMinutes(
-      log.sidePlankLeftSets,
-      log.sidePlankLeftMinutes
-    );
-    const sideRight = getPlankTotalMinutes(
-      log.sidePlankRightSets,
-      log.sidePlankRightMinutes
-    );
-    const superman = getExerciseTotal(log.supermanSets, log.supermanReps);
-    const lunges = getExerciseTotal(log.lungeSets, log.lungeReps);
-    const leftLunges = getExerciseTotal(log.leftLungeSets, log.leftLungeReps);
-    const rightLunges = getExerciseTotal(log.rightLungeSets, log.rightLungeReps);
-    const mountainClimbers = getExerciseTotal(
-      log.mountainClimberSets,
-      log.mountainClimberReps
-    );
+  const date = new Date(`${dateString}T00:00:00`);
 
-    return `PU ${pushups} / SQ ${squats} / Plank ${plank.toFixed(
-      1
-    )}m / Side L ${sideLeft.toFixed(1)}m / Side R ${sideRight.toFixed(
-      1
-    )}m / Superman ${superman} / Lunges ${lunges} / L ${leftLunges} / R ${rightLunges} / MC ${mountainClimbers}`;
-  }
+  return date.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+  });
+}
 
-  if (log.type === "walking") {
-    return `${log.steps ?? 0} steps`;
-  }
+function shiftDate(dateString: string, days: number) {
+  const [year, month, day] = dateString.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
 
-  if (log.type === "running") {
-    return `${log.distanceKm ?? 0} km / ${log.steps ?? 0} steps`;
-  }
+  date.setDate(date.getDate() + days);
 
-  if (log.type === "swimming") {
-    return `${log.swimmingMeters ?? 0} m / ${log.swimmingLaps ?? 0} laps`;
-  }
-
-  if (log.type === "stretching") {
-    return "Stretching only";
-  }
-
-  return log.otherName ? log.otherName : "Other activity";
+  return getLocalDateString(date);
 }
 
 function normalizeWorkoutType(value: unknown): WorkoutType {
@@ -458,91 +183,277 @@ function normalizeWorkoutType(value: unknown): WorkoutType {
   return "other";
 }
 
-function normalizeWorkoutLog(raw: Record<string, unknown>): WorkoutLog {
+function normalizePlayType(value: unknown): BadmintonPlayType {
+  if (value === "casual" || value === "practice" || value === "match") {
+    return value;
+  }
+
+  return "casual";
+}
+
+function getWorkoutLabel(type: WorkoutType) {
+  if (type === "badminton") return "Badminton";
+  if (type === "home-workout") return "Home Workout";
+  if (type === "walking") return "Walking";
+  if (type === "running") return "Running";
+  if (type === "swimming") return "Swimming";
+  if (type === "stretching") return "Stretching";
+  return "Other";
+}
+
+function getMET(type: WorkoutType) {
+  if (type === "badminton") return 5.5;
+  if (type === "walking") return 3.5;
+  if (type === "running") return 8;
+  if (type === "swimming") return 7;
+  if (type === "home-workout") return 4;
+  if (type === "stretching") return 2.5;
+  return 3;
+}
+
+function estimateCalories({
+  type,
+  weightKg,
+  minutes,
+}: {
+  type: WorkoutType;
+  weightKg: number;
+  minutes: number;
+}) {
+  const met = getMET(type);
+  const calories = (met * 3.5 * weightKg * minutes) / 200;
+
+  return Math.max(Math.round(calories), 0);
+}
+
+function createEmptyForm(date: string): WorkoutLog {
   return {
-    id: typeof raw.id === "string" ? raw.id : crypto.randomUUID(),
+    id: crypto.randomUUID(),
+    date,
+    type: "badminton",
+    durationMinutes: 60,
+    estimatedCalories: 0,
+    playType: "casual",
+    gamesPlayed: 0,
+    steps: 0,
+    distanceKm: 0,
+    swimmingMeters: 0,
+    laps: 0,
+    pushupSets: 3,
+    pushupReps: 10,
+    squatSets: 3,
+    squatReps: 15,
+    plankSets: 3,
+    plankMinutes: 0.5,
+    notes: "",
+  };
+}
+
+function normalizeLog(raw: Record<string, unknown>): WorkoutLog {
+  const details =
+    raw.details && typeof raw.details === "object"
+      ? (raw.details as Record<string, unknown>)
+      : raw;
+
+  const type = normalizeWorkoutType(raw.type);
+  const durationMinutes = toNumber(
+    raw.durationMinutes ?? raw.duration_minutes,
+    0
+  );
+
+  return {
+    id: isUuid(raw.id) ? String(raw.id) : crypto.randomUUID(),
     date: typeof raw.date === "string" ? raw.date : today,
-    type: normalizeWorkoutType(raw.type),
-    durationMinutes:
-      typeof raw.durationMinutes === "number" ? raw.durationMinutes : 0,
-
-    playType:
-      raw.playType === "casual" || raw.playType === "practice" || raw.playType === "match"
-        ? raw.playType
-        : undefined,
-    gamesPlayed: typeof raw.gamesPlayed === "number" ? raw.gamesPlayed : 0,
-
-    pushupSets: typeof raw.pushupSets === "number" ? raw.pushupSets : 0,
-    pushupReps: typeof raw.pushupReps === "number" ? raw.pushupReps : 0,
-
-    squatSets: typeof raw.squatSets === "number" ? raw.squatSets : 0,
-    squatReps: typeof raw.squatReps === "number" ? raw.squatReps : 0,
-
-    plankSets: typeof raw.plankSets === "number" ? raw.plankSets : 0,
-    plankMinutes: typeof raw.plankMinutes === "number" ? raw.plankMinutes : 0,
-
-    sidePlankLeftSets:
-      typeof raw.sidePlankLeftSets === "number" ? raw.sidePlankLeftSets : 0,
-    sidePlankLeftMinutes:
-      typeof raw.sidePlankLeftMinutes === "number" ? raw.sidePlankLeftMinutes : 0,
-
-    sidePlankRightSets:
-      typeof raw.sidePlankRightSets === "number" ? raw.sidePlankRightSets : 0,
-    sidePlankRightMinutes:
-      typeof raw.sidePlankRightMinutes === "number" ? raw.sidePlankRightMinutes : 0,
-
-    supermanSets: typeof raw.supermanSets === "number" ? raw.supermanSets : 0,
-    supermanReps: typeof raw.supermanReps === "number" ? raw.supermanReps : 0,
-
-    lungeSets: typeof raw.lungeSets === "number" ? raw.lungeSets : 0,
-    lungeReps: typeof raw.lungeReps === "number" ? raw.lungeReps : 0,
-
-    leftLungeSets: typeof raw.leftLungeSets === "number" ? raw.leftLungeSets : 0,
-    leftLungeReps: typeof raw.leftLungeReps === "number" ? raw.leftLungeReps : 0,
-
-    rightLungeSets:
-      typeof raw.rightLungeSets === "number" ? raw.rightLungeSets : 0,
-    rightLungeReps:
-      typeof raw.rightLungeReps === "number" ? raw.rightLungeReps : 0,
-
-    mountainClimberSets:
-      typeof raw.mountainClimberSets === "number" ? raw.mountainClimberSets : 0,
-    mountainClimberReps:
-      typeof raw.mountainClimberReps === "number" ? raw.mountainClimberReps : 0,
-
-    steps: typeof raw.steps === "number" ? raw.steps : 0,
-    distanceKm: typeof raw.distanceKm === "number" ? raw.distanceKm : 0,
-    swimmingMeters:
-      typeof raw.swimmingMeters === "number" ? raw.swimmingMeters : 0,
-    swimmingLaps: typeof raw.swimmingLaps === "number" ? raw.swimmingLaps : 0,
-    otherName: typeof raw.otherName === "string" ? raw.otherName : "",
+    type,
+    durationMinutes,
+    estimatedCalories: toNumber(
+      raw.estimatedCalories ?? raw.estimated_calories,
+      0
+    ),
+    playType: normalizePlayType(details.playType),
+    gamesPlayed: toNumber(details.gamesPlayed, 0),
+    steps: toNumber(details.steps, 0),
+    distanceKm: toNumber(details.distanceKm, 0),
+    swimmingMeters: toNumber(details.swimmingMeters, 0),
+    laps: toNumber(details.laps, 0),
+    pushupSets: toNumber(details.pushupSets, 3),
+    pushupReps: toNumber(details.pushupReps, 10),
+    squatSets: toNumber(details.squatSets, 3),
+    squatReps: toNumber(details.squatReps, 15),
+    plankSets: toNumber(details.plankSets, 3),
+    plankMinutes: toNumber(details.plankMinutes, 0.5),
     notes: typeof raw.notes === "string" ? raw.notes : "",
   };
 }
 
+function databaseToWorkoutLog(row: Record<string, unknown>): WorkoutLog {
+  return normalizeLog({
+    id: row.id,
+    date: row.date,
+    type: row.type,
+    duration_minutes: row.duration_minutes,
+    estimated_calories: row.estimated_calories,
+    details: row.details,
+    notes: row.notes,
+  });
+}
+
+function workoutLogToDatabase(log: WorkoutLog, userId: string) {
+  return {
+    id: log.id,
+    user_id: userId,
+    date: log.date,
+    type: log.type,
+    duration_minutes: Math.round(log.durationMinutes),
+    estimated_calories: Math.round(log.estimatedCalories),
+    details: {
+      playType: log.playType,
+      gamesPlayed: log.gamesPlayed,
+      steps: log.steps,
+      distanceKm: log.distanceKm,
+      swimmingMeters: log.swimmingMeters,
+      laps: log.laps,
+      pushupSets: log.pushupSets,
+      pushupReps: log.pushupReps,
+      squatSets: log.squatSets,
+      squatReps: log.squatReps,
+      plankSets: log.plankSets,
+      plankMinutes: log.plankMinutes,
+    },
+    notes: log.notes,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function mergeLogsById(localLogs: WorkoutLog[], cloudLogs: WorkoutLog[]) {
+  const map = new Map<string, WorkoutLog>();
+
+  cloudLogs.forEach((log) => {
+    map.set(log.id, log);
+  });
+
+  localLogs.forEach((log) => {
+    map.set(log.id, log);
+  });
+
+  return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function getWorkoutCoachMessage({
+  minutes,
+  calories,
+  workoutGoal,
+}: {
+  minutes: number;
+  calories: number;
+  workoutGoal: number;
+}) {
+  if (minutes === 0) {
+    return "No workout logged yet. Do at least a short walk or home workout.";
+  }
+
+  if (minutes < workoutGoal) {
+    return `Good start. You are ${workoutGoal - minutes} minutes short of today’s workout goal.`;
+  }
+
+  if (calories >= 500) {
+    return "Big burn day. Make sure protein and water are not too low.";
+  }
+
+  return "Workout goal reached. Keep the rest of the day clean and recover well.";
+}
+
 export default function WorkoutPage() {
   const [logs, setLogs] = useState<WorkoutLog[]>([]);
+  const [goals, setGoals] = useState<Goals>(defaultGoals);
+  const [dailyLogs, setDailyLogs] = useState<DailyLog[]>([]);
   const [selectedDate, setSelectedDate] = useState(today);
-  const [form, setForm] = useState<WorkoutLog>(() => createDefaultForm(today));
+  const [form, setForm] = useState<WorkoutLog>(() => createEmptyForm(today));
+  const [userId, setUserId] = useState("");
+  const [syncStatus, setSyncStatus] = useState("Loading local workout data...");
 
   useEffect(() => {
-    const saved = localStorage.getItem("operation-recode-workout-logs");
+    async function loadWorkoutData() {
+      setGoals(loadGoals());
+      setDailyLogs(loadDailyLogs());
 
-    if (!saved) return;
+      const saved = localStorage.getItem(storageKeys.workout);
+      let localLogs: WorkoutLog[] = [];
 
-    try {
-      const parsed = JSON.parse(saved);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
 
-      if (Array.isArray(parsed)) {
-        setLogs(parsed.map((item) => normalizeWorkoutLog(item)));
+          if (Array.isArray(parsed)) {
+            localLogs = parsed.map((item) => normalizeLog(item));
+            setLogs(localLogs);
+          }
+        } catch {
+          localLogs = [];
+          setLogs([]);
+        }
       }
-    } catch {
-      setLogs([]);
+
+      try {
+        const supabase = createClient();
+        const { data: userData } = await supabase.auth.getUser();
+
+        if (!userData.user) {
+          setSyncStatus("Not logged in. Workout logs are local only.");
+          return;
+        }
+
+        setUserId(userData.user.id);
+        setSyncStatus("Loading cloud workout logs...");
+
+        const { data, error } = await supabase
+          .from("workout_logs")
+          .select("*")
+          .eq("user_id", userData.user.id)
+          .order("date", { ascending: true });
+
+        if (error) {
+          setSyncStatus(`Cloud load failed: ${error.message}`);
+          return;
+        }
+
+        const cloudLogs = (data ?? []).map((item) =>
+          databaseToWorkoutLog(item as Record<string, unknown>)
+        );
+
+        const mergedLogs = mergeLogsById(localLogs, cloudLogs);
+
+        setLogs(mergedLogs);
+        localStorage.setItem(storageKeys.workout, JSON.stringify(mergedLogs));
+
+        if (mergedLogs.length > 0) {
+          const rows = mergedLogs.map((log) =>
+            workoutLogToDatabase(log, userData.user!.id)
+          );
+
+          const { error: upsertError } = await supabase
+            .from("workout_logs")
+            .upsert(rows, { onConflict: "id" });
+
+          if (upsertError) {
+            setSyncStatus(`Cloud sync failed: ${upsertError.message}`);
+            return;
+          }
+        }
+
+        setSyncStatus("Workout logs synced with Supabase.");
+      } catch (error) {
+        setSyncStatus(
+          error instanceof Error ? error.message : "Could not connect to Supabase."
+        );
+      }
     }
+
+    loadWorkoutData();
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("operation-recode-workout-logs", JSON.stringify(logs));
+    localStorage.setItem(storageKeys.workout, JSON.stringify(logs));
   }, [logs]);
 
   useEffect(() => {
@@ -568,123 +479,160 @@ export default function WorkoutPage() {
     return logs.filter((log) => log.date === selectedDate);
   }, [logs, selectedDate]);
 
-  const totalMinutes = selectedLogs.reduce((sum, log) => sum + log.durationMinutes, 0);
-  const totalGames = selectedLogs.reduce((sum, log) => sum + (log.gamesPlayed ?? 0), 0);
-  const totalSteps = selectedLogs.reduce((sum, log) => sum + (log.steps ?? 0), 0);
-  const totalDistance = selectedLogs.reduce((sum, log) => sum + (log.distanceKm ?? 0), 0);
-  const totalSwimMeters = selectedLogs.reduce(
-    (sum, log) => sum + (log.swimmingMeters ?? 0),
+  const selectedWeight = useMemo(() => {
+    const exactDay = dailyLogs.find((log) => log.date === selectedDate && log.weight > 0);
+    if (exactDay) return exactDay.weight;
+
+    const latestBefore = dailyLogs
+      .filter((log) => log.weight > 0 && log.date <= selectedDate)
+      .sort((a, b) => b.date.localeCompare(a.date))[0];
+
+    if (latestBefore) return latestBefore.weight;
+
+    const latestAny = dailyLogs
+      .filter((log) => log.weight > 0)
+      .sort((a, b) => b.date.localeCompare(a.date))[0];
+
+    return latestAny?.weight ?? defaultBodyWeight;
+  }, [dailyLogs, selectedDate]);
+
+  const liveEstimatedCalories = estimateCalories({
+    type: form.type,
+    weightKg: selectedWeight,
+    minutes: Number(form.durationMinutes),
+  });
+
+  const totalMinutes = selectedLogs.reduce(
+    (sum, log) => sum + log.durationMinutes,
     0
   );
 
-  const totalPushups = selectedLogs.reduce(
-    (sum, log) => sum + getExerciseTotal(log.pushupSets, log.pushupReps),
+  const totalBurn = selectedLogs.reduce(
+    (sum, log) => sum + log.estimatedCalories,
     0
   );
 
-  const totalSquats = selectedLogs.reduce(
-    (sum, log) => sum + getExerciseTotal(log.squatSets, log.squatReps),
-    0
-  );
+  const workoutLeft = Math.max(goals.workoutGoal - totalMinutes, 0);
+  const workoutPercent = Math.min((totalMinutes / goals.workoutGoal) * 100, 100);
 
-  const totalLunges = selectedLogs.reduce((sum, log) => sum + getAllLunges(log), 0);
-
-  const totalPlankMinutes = selectedLogs.reduce(
-    (sum, log) => sum + getAllPlankMinutes(log),
-    0
-  );
-
-  const averageScore =
-    selectedLogs.length > 0
-      ? Math.round(
-          selectedLogs.reduce((sum, log) => sum + getWorkoutScore(log), 0) /
-            selectedLogs.length
-        )
-      : 0;
-
-  function handleTypeChange(nextType: WorkoutType) {
-    setForm({
-      ...form,
-      type: nextType,
-      durationMinutes: getDefaultDuration(nextType),
-      playType: nextType === "badminton" ? "match" : undefined,
-      gamesPlayed: nextType === "badminton" ? form.gamesPlayed ?? 0 : 0,
-      steps:
-        nextType === "walking" || nextType === "running" ? form.steps ?? 0 : 0,
-      distanceKm: nextType === "running" ? form.distanceKm ?? 0 : 0,
-      swimmingMeters: nextType === "swimming" ? form.swimmingMeters ?? 0 : 0,
-      swimmingLaps: nextType === "swimming" ? form.swimmingLaps ?? 0 : 0,
-      otherName: nextType === "other" ? form.otherName ?? "" : "",
-    });
-  }
-
-  function saveWorkout() {
-    if (form.type === "other" && !form.otherName?.trim()) {
-      alert("ระบุด้วยว่า Other คืออะไร");
+  async function saveLogToCloud(log: WorkoutLog) {
+    if (!userId) {
+      setSyncStatus("Saved locally. Login to sync workout logs.");
       return;
     }
 
-    const isHome = form.type === "home-workout";
+    try {
+      const supabase = createClient();
+
+      const { error } = await supabase
+        .from("workout_logs")
+        .upsert(workoutLogToDatabase(log, userId), { onConflict: "id" });
+
+      if (error) {
+        setSyncStatus(`Saved locally, cloud sync failed: ${error.message}`);
+        return;
+      }
+
+      setSyncStatus("Workout log saved and synced.");
+    } catch (error) {
+      setSyncStatus(
+        error instanceof Error
+          ? `Saved locally, cloud sync failed: ${error.message}`
+          : "Saved locally, cloud sync failed."
+      );
+    }
+  }
+
+  async function saveWorkout() {
+    if (Number(form.durationMinutes) <= 0) {
+      alert("ใส่เวลา workout ก่อน");
+      return;
+    }
 
     const newLog: WorkoutLog = {
       ...form,
       id: crypto.randomUUID(),
       date: selectedDate,
       durationMinutes: Number(form.durationMinutes),
-
-      gamesPlayed: form.type === "badminton" ? Number(form.gamesPlayed ?? 0) : 0,
-
-      pushupSets: isHome ? Number(form.pushupSets ?? 0) : 0,
-      pushupReps: isHome ? Number(form.pushupReps ?? 0) : 0,
-
-      squatSets: isHome ? Number(form.squatSets ?? 0) : 0,
-      squatReps: isHome ? Number(form.squatReps ?? 0) : 0,
-
-      plankSets: isHome ? Number(form.plankSets ?? 0) : 0,
-      plankMinutes: isHome ? Number(form.plankMinutes ?? 0) : 0,
-
-      sidePlankLeftSets: isHome ? Number(form.sidePlankLeftSets ?? 0) : 0,
-      sidePlankLeftMinutes: isHome ? Number(form.sidePlankLeftMinutes ?? 0) : 0,
-
-      sidePlankRightSets: isHome ? Number(form.sidePlankRightSets ?? 0) : 0,
-      sidePlankRightMinutes: isHome ? Number(form.sidePlankRightMinutes ?? 0) : 0,
-
-      supermanSets: isHome ? Number(form.supermanSets ?? 0) : 0,
-      supermanReps: isHome ? Number(form.supermanReps ?? 0) : 0,
-
-      lungeSets: isHome ? Number(form.lungeSets ?? 0) : 0,
-      lungeReps: isHome ? Number(form.lungeReps ?? 0) : 0,
-
-      leftLungeSets: isHome ? Number(form.leftLungeSets ?? 0) : 0,
-      leftLungeReps: isHome ? Number(form.leftLungeReps ?? 0) : 0,
-
-      rightLungeSets: isHome ? Number(form.rightLungeSets ?? 0) : 0,
-      rightLungeReps: isHome ? Number(form.rightLungeReps ?? 0) : 0,
-
-      mountainClimberSets: isHome ? Number(form.mountainClimberSets ?? 0) : 0,
-      mountainClimberReps: isHome ? Number(form.mountainClimberReps ?? 0) : 0,
-
-      steps:
-        form.type === "walking" || form.type === "running"
-          ? Number(form.steps ?? 0)
-          : 0,
-
-      distanceKm: form.type === "running" ? Number(form.distanceKm ?? 0) : 0,
-
-      swimmingMeters:
-        form.type === "swimming" ? Number(form.swimmingMeters ?? 0) : 0,
-      swimmingLaps:
-        form.type === "swimming" ? Number(form.swimmingLaps ?? 0) : 0,
-
-      otherName: form.type === "other" ? form.otherName?.trim() : "",
+      estimatedCalories: liveEstimatedCalories,
+      gamesPlayed: Number(form.gamesPlayed),
+      steps: Number(form.steps),
+      distanceKm: Number(form.distanceKm),
+      swimmingMeters: Number(form.swimmingMeters),
+      laps: Number(form.laps),
+      pushupSets: Number(form.pushupSets),
+      pushupReps: Number(form.pushupReps),
+      squatSets: Number(form.squatSets),
+      squatReps: Number(form.squatReps),
+      plankSets: Number(form.plankSets),
+      plankMinutes: Number(form.plankMinutes),
     };
 
-    setLogs((current) => [...current, newLog]);
-    setForm((current) => ({ ...current, id: crypto.randomUUID(), notes: "" }));
+    const nextLogs = [...logs, newLog];
+
+    setLogs(nextLogs);
+    localStorage.setItem(storageKeys.workout, JSON.stringify(nextLogs));
+    setForm(createEmptyForm(selectedDate));
+
+    await saveLogToCloud(newLog);
   }
 
-  function deleteWorkout(id: string) {
-    setLogs((current) => current.filter((log) => log.id !== id));
+  async function quickSaveWorkout(type: WorkoutType, minutes: number) {
+    const newLog: WorkoutLog = {
+      ...createEmptyForm(selectedDate),
+      id: crypto.randomUUID(),
+      date: selectedDate,
+      type,
+      durationMinutes: minutes,
+      estimatedCalories: estimateCalories({
+        type,
+        weightKg: selectedWeight,
+        minutes,
+      }),
+      notes: "Quick add",
+    };
+
+    const nextLogs = [...logs, newLog];
+
+    setLogs(nextLogs);
+    localStorage.setItem(storageKeys.workout, JSON.stringify(nextLogs));
+
+    await saveLogToCloud(newLog);
+  }
+
+  async function deleteWorkout(id: string) {
+    const nextLogs = logs.filter((log) => log.id !== id);
+
+    setLogs(nextLogs);
+    localStorage.setItem(storageKeys.workout, JSON.stringify(nextLogs));
+
+    if (!userId) {
+      setSyncStatus("Deleted locally. Login to sync deletions.");
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+
+      const { error } = await supabase
+        .from("workout_logs")
+        .delete()
+        .eq("user_id", userId)
+        .eq("id", id);
+
+      if (error) {
+        setSyncStatus(`Deleted locally, cloud delete failed: ${error.message}`);
+        return;
+      }
+
+      setSyncStatus("Workout log deleted from cloud.");
+    } catch (error) {
+      setSyncStatus(
+        error instanceof Error
+          ? `Deleted locally, cloud delete failed: ${error.message}`
+          : "Deleted locally, cloud delete failed."
+      );
+    }
   }
 
   return (
@@ -700,380 +648,377 @@ export default function WorkoutPage() {
             <h1 className="mt-2 text-3xl font-black tracking-tight md:text-6xl">
               Workout Tracker.
               <br />
-              Log training only.
+              Burn estimate.
             </h1>
           </div>
 
           <div className="rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-zinc-300">
-            Training / v0.12
+            Workout / v2.0
           </div>
         </nav>
 
-        <DateMenu
-          selectedDate={selectedDate}
-          availableDates={availableDates}
-          today={today}
-          onChange={setSelectedDate}
-        />
+        <section className="mb-5 rounded-3xl border border-emerald-400/30 bg-emerald-400/10 p-5 text-sm text-emerald-100">
+          {syncStatus}
+        </section>
 
-        <section className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
-          <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
-            <p className="text-sm text-zinc-400">Workout Check-in</p>
-            <h2 className="mt-1 text-2xl font-bold">Log training</h2>
-
-            <div className="mt-5 grid gap-3 md:grid-cols-2">
-              <label className="block">
-                <span className="text-xs text-zinc-500">Workout Type</span>
-                <select
-                  value={form.type}
-                  onChange={(event) =>
-                    handleTypeChange(event.target.value as WorkoutType)
-                  }
-                  className="mt-1 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
-                >
-                  <option value="badminton">Badminton</option>
-                  <option value="home-workout">Home Workout</option>
-                  <option value="walking">Walking</option>
-                  <option value="running">Running</option>
-                  <option value="swimming">Swimming</option>
-                  <option value="stretching">Stretching</option>
-                  <option value="other">Other</option>
-                </select>
-              </label>
-
-              <Input
-                label="Duration (minutes)"
-                type="number"
-                value={String(form.durationMinutes)}
-                onChange={(value) =>
-                  setForm({ ...form, durationMinutes: Number(value) })
-                }
-              />
-
-              {form.type === "badminton" && (
-                <>
-                  <label className="block">
-                    <span className="text-xs text-zinc-500">Play Type</span>
-                    <select
-                      value={form.playType ?? "match"}
-                      onChange={(event) =>
-                        setForm({
-                          ...form,
-                          playType: event.target.value as BadmintonPlayType,
-                        })
-                      }
-                      className="mt-1 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
-                    >
-                      <option value="casual">ตีเล่น</option>
-                      <option value="practice">ซ้อม</option>
-                      <option value="match">เล่นเกมจริง</option>
-                    </select>
-                  </label>
-
-                  <Input
-                    label="Games played"
-                    type="number"
-                    value={String(form.gamesPlayed ?? 0)}
-                    onChange={(value) =>
-                      setForm({ ...form, gamesPlayed: Number(value) })
-                    }
-                  />
-                </>
-              )}
-
-              {form.type === "home-workout" && (
-                <>
-                  <div className="md:col-span-2 rounded-2xl bg-zinc-950 p-4 text-sm text-zinc-400">
-                    <p className="font-bold text-zinc-200">Recommended Home Workout</p>
-                    <p className="mt-2">
-                      Core: Push-ups, Squats, Plank. Optional: Side Plank,
-                      Superman, Lunges, Mountain Climbers.
-                    </p>
-                  </div>
-
-                  <ExerciseSetReps
-                    title="Push-ups"
-                    unit="reps"
-                    sets={form.pushupSets ?? 0}
-                    reps={form.pushupReps ?? 0}
-                    onSetsChange={(value) =>
-                      setForm({ ...form, pushupSets: Number(value) })
-                    }
-                    onRepsChange={(value) =>
-                      setForm({ ...form, pushupReps: Number(value) })
-                    }
-                  />
-
-                  <ExerciseSetReps
-                    title="Squats"
-                    unit="reps"
-                    sets={form.squatSets ?? 0}
-                    reps={form.squatReps ?? 0}
-                    onSetsChange={(value) =>
-                      setForm({ ...form, squatSets: Number(value) })
-                    }
-                    onRepsChange={(value) =>
-                      setForm({ ...form, squatReps: Number(value) })
-                    }
-                  />
-
-                  <ExerciseSetReps
-                    title="Plank"
-                    unit="min / set"
-                    sets={form.plankSets ?? 0}
-                    reps={form.plankMinutes ?? 0}
-                    step="0.1"
-                    onSetsChange={(value) =>
-                      setForm({ ...form, plankSets: Number(value) })
-                    }
-                    onRepsChange={(value) =>
-                      setForm({ ...form, plankMinutes: Number(value) })
-                    }
-                  />
-
-                  <ExerciseSetReps
-                    title="Side Plank Left"
-                    unit="min / set"
-                    sets={form.sidePlankLeftSets ?? 0}
-                    reps={form.sidePlankLeftMinutes ?? 0}
-                    step="0.1"
-                    onSetsChange={(value) =>
-                      setForm({ ...form, sidePlankLeftSets: Number(value) })
-                    }
-                    onRepsChange={(value) =>
-                      setForm({ ...form, sidePlankLeftMinutes: Number(value) })
-                    }
-                  />
-
-                  <ExerciseSetReps
-                    title="Side Plank Right"
-                    unit="min / set"
-                    sets={form.sidePlankRightSets ?? 0}
-                    reps={form.sidePlankRightMinutes ?? 0}
-                    step="0.1"
-                    onSetsChange={(value) =>
-                      setForm({ ...form, sidePlankRightSets: Number(value) })
-                    }
-                    onRepsChange={(value) =>
-                      setForm({ ...form, sidePlankRightMinutes: Number(value) })
-                    }
-                  />
-
-                  <ExerciseSetReps
-                    title="Superman"
-                    unit="reps"
-                    sets={form.supermanSets ?? 0}
-                    reps={form.supermanReps ?? 0}
-                    onSetsChange={(value) =>
-                      setForm({ ...form, supermanSets: Number(value) })
-                    }
-                    onRepsChange={(value) =>
-                      setForm({ ...form, supermanReps: Number(value) })
-                    }
-                  />
-
-                  <ExerciseSetReps
-                    title="Lunges"
-                    unit="reps"
-                    sets={form.lungeSets ?? 0}
-                    reps={form.lungeReps ?? 0}
-                    onSetsChange={(value) =>
-                      setForm({ ...form, lungeSets: Number(value) })
-                    }
-                    onRepsChange={(value) =>
-                      setForm({ ...form, lungeReps: Number(value) })
-                    }
-                  />
-
-                  <ExerciseSetReps
-                    title="Mountain Climbers"
-                    unit="reps"
-                    sets={form.mountainClimberSets ?? 0}
-                    reps={form.mountainClimberReps ?? 0}
-                    onSetsChange={(value) =>
-                      setForm({ ...form, mountainClimberSets: Number(value) })
-                    }
-                    onRepsChange={(value) =>
-                      setForm({ ...form, mountainClimberReps: Number(value) })
-                    }
-                  />
-                </>
-              )}
-
-              {form.type === "walking" && (
-                <Input
-                  label="Steps"
-                  type="number"
-                  value={String(form.steps ?? 0)}
-                  onChange={(value) => setForm({ ...form, steps: Number(value) })}
-                />
-              )}
-
-              {form.type === "running" && (
-                <>
-                  <Input
-                    label="Distance (km)"
-                    type="number"
-                    value={String(form.distanceKm ?? 0)}
-                    onChange={(value) =>
-                      setForm({ ...form, distanceKm: Number(value) })
-                    }
-                  />
-
-                  <Input
-                    label="Steps"
-                    type="number"
-                    value={String(form.steps ?? 0)}
-                    onChange={(value) => setForm({ ...form, steps: Number(value) })}
-                  />
-                </>
-              )}
-
-              {form.type === "swimming" && (
-                <>
-                  <Input
-                    label="Distance (meters)"
-                    type="number"
-                    value={String(form.swimmingMeters ?? 0)}
-                    onChange={(value) =>
-                      setForm({ ...form, swimmingMeters: Number(value) })
-                    }
-                  />
-
-                  <Input
-                    label="Laps"
-                    type="number"
-                    value={String(form.swimmingLaps ?? 0)}
-                    onChange={(value) =>
-                      setForm({ ...form, swimmingLaps: Number(value) })
-                    }
-                  />
-                </>
-              )}
-
-              {form.type === "other" && (
-                <Input
-                  label="Other activity name"
-                  type="text"
-                  value={form.otherName ?? ""}
-                  onChange={(value) => setForm({ ...form, otherName: value })}
-                />
-              )}
+        <section className="mb-5 rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="text-sm text-zinc-400">Date Menu</p>
+              <h2 className="mt-1 text-2xl font-bold">Select Date</h2>
             </div>
 
-            <label className="mt-3 block">
-              <span className="text-xs text-zinc-500">Notes</span>
-              <textarea
-                value={form.notes}
-                onChange={(event) =>
-                  setForm({ ...form, notes: event.target.value })
-                }
-                placeholder="เช่น ตีแบด 3 ชม. / เดิน 30 นาที / plank ไหวไหม / เข่าโอเคไหม"
-                className="mt-1 min-h-24 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => setSelectedDate(shiftDate(selectedDate, -1))}
+                className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-300 hover:bg-zinc-800"
+              >
+                ← Prev
+              </button>
+
+              <button
+                onClick={() => setSelectedDate(today)}
+                className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-black text-zinc-950 hover:bg-emerald-300"
+              >
+                Today
+              </button>
+
+              <button
+                onClick={() => setSelectedDate(shiftDate(selectedDate, 1))}
+                className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-300 hover:bg-zinc-800"
+              >
+                Next →
+              </button>
+
+              <select
+                value={selectedDate}
+                onChange={(event) => setSelectedDate(event.target.value)}
+                className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
+              >
+                {availableDates.map((date) => (
+                  <option key={date} value={date}>
+                    {date === today ? "Today — " : ""}
+                    {formatDateForMenu(date)}
+                  </option>
+                ))}
+              </select>
+
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(event) => setSelectedDate(event.target.value)}
+                className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
               />
-            </label>
-
-            <button
-              onClick={saveWorkout}
-              className="mt-4 w-full rounded-2xl bg-emerald-400 px-5 py-3 font-bold text-zinc-950 transition hover:bg-emerald-300"
-            >
-              Save Workout
-            </button>
-          </div>
-
-          <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
-            <p className="text-sm text-zinc-400">Today Summary</p>
-            <h2 className="mt-1 text-2xl font-bold">{selectedDate}</h2>
-
-            <div className="mt-5 rounded-3xl bg-zinc-950 p-5">
-              <div className="flex flex-wrap items-end justify-between gap-4">
-                <div>
-                  <p className="text-sm text-zinc-500">Training Score</p>
-                  <p className="mt-2 text-5xl font-black">
-                    {averageScore}
-                    <span className="text-xl text-zinc-500"> / 100</span>
-                  </p>
-                </div>
-
-                <div className="text-right">
-                  <p className="text-sm text-zinc-500">Minutes</p>
-                  <p className="mt-2 text-4xl font-black">{totalMinutes}</p>
-                </div>
-              </div>
-
-              <div className="mt-4 h-3 overflow-hidden rounded-full bg-zinc-800">
-                <div
-                  className="h-full rounded-full bg-emerald-400 transition-all"
-                  style={{ width: `${averageScore}%` }}
-                />
-              </div>
-            </div>
-
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
-              <SmallStat label="Logs" value={String(selectedLogs.length)} />
-              <SmallStat label="Games" value={String(totalGames)} />
-              <SmallStat label="Steps" value={String(totalSteps)} />
-              <SmallStat label="Run" value={`${totalDistance.toFixed(1)} km`} />
-              <SmallStat label="Swim" value={`${totalSwimMeters} m`} />
-              <SmallStat
-                label="Strength"
-                value={`${totalPushups}/${totalSquats}/${totalLunges}/${totalPlankMinutes.toFixed(
-                  1
-                )}m`}
-              />
-            </div>
-
-            <div className="mt-4 rounded-3xl bg-zinc-950 p-5">
-              <p className="text-sm text-zinc-500">Training Coach Lite</p>
-              <p className="mt-3 text-sm leading-6 text-zinc-300">
-                {getCoachMessage(selectedLogs)}
-              </p>
             </div>
           </div>
         </section>
 
-        <section className="mt-5 rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
-          <p className="text-sm text-zinc-400">Workout History</p>
-          <h3 className="mt-1 text-2xl font-bold">Training logs</h3>
+        <section className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+          <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
+            <p className="text-sm text-zinc-400">Quick Add</p>
+            <h2 className="mt-1 text-2xl font-bold">Fast workout log</h2>
 
-          <div className="mt-5 grid gap-3">
-            {selectedLogs.length === 0 ? (
-              <div className="rounded-2xl bg-zinc-950 p-5 text-sm text-zinc-500">
-                ยังไม่มี workout log วันนี้
-              </div>
-            ) : (
-              selectedLogs
-                .slice()
-                .reverse()
-                .map((log) => (
-                  <div
-                    key={log.id}
-                    className="grid gap-3 rounded-2xl bg-zinc-950 p-4 text-sm md:grid-cols-[1fr_1fr_1fr_1fr_auto] md:items-center"
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
+              <QuickButton label="Badminton 120 min" onClick={() => quickSaveWorkout("badminton", 120)} />
+              <QuickButton label="Badminton 180 min" onClick={() => quickSaveWorkout("badminton", 180)} />
+              <QuickButton label="Walk 30 min" onClick={() => quickSaveWorkout("walking", 30)} />
+              <QuickButton label="Walk 45 min" onClick={() => quickSaveWorkout("walking", 45)} />
+              <QuickButton label="Home 15 min" onClick={() => quickSaveWorkout("home-workout", 15)} />
+              <QuickButton label="Stretch 15 min" onClick={() => quickSaveWorkout("stretching", 15)} />
+            </div>
+
+            <div className="mt-5 rounded-3xl border border-zinc-800 bg-zinc-950 p-5">
+              <p className="text-sm text-zinc-400">Workout Check-in</p>
+              <h2 className="mt-1 text-2xl font-bold">Manual log</h2>
+
+              <div className="mt-5 grid gap-3 md:grid-cols-2">
+                <label className="block">
+                  <span className="text-xs text-zinc-500">Workout Type</span>
+                  <select
+                    value={form.type}
+                    onChange={(event) =>
+                      setForm({ ...form, type: event.target.value as WorkoutType })
+                    }
+                    className="mt-1 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
                   >
-                    <div>
-                      <p className="font-bold">
-                        {log.type === "other" && log.otherName
-                          ? log.otherName
-                          : getWorkoutLabel(log.type)}
-                      </p>
-                      <p className="text-zinc-500">
-                        Score {getWorkoutScore(log)}/100
-                      </p>
-                    </div>
+                    <option value="badminton">Badminton</option>
+                    <option value="home-workout">Home Workout</option>
+                    <option value="walking">Walking</option>
+                    <option value="running">Running</option>
+                    <option value="swimming">Swimming</option>
+                    <option value="stretching">Stretching</option>
+                    <option value="other">Other</option>
+                  </select>
+                </label>
 
-                    <p>{log.durationMinutes} min</p>
-                    <p className="break-words text-zinc-400">{getWorkoutDetail(log)}</p>
-                    <p className="text-zinc-500">{log.notes || "-"}</p>
+                <Input
+                  label="Duration (minutes)"
+                  type="number"
+                  value={String(form.durationMinutes)}
+                  onChange={(value) =>
+                    setForm({ ...form, durationMinutes: Number(value) })
+                  }
+                />
 
-                    <button
-                      onClick={() => deleteWorkout(log.id)}
-                      className="rounded-xl border border-zinc-800 px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800"
-                    >
-                      Delete
-                    </button>
+                {form.type === "badminton" && (
+                  <>
+                    <label className="block">
+                      <span className="text-xs text-zinc-500">Play Type</span>
+                      <select
+                        value={form.playType}
+                        onChange={(event) =>
+                          setForm({
+                            ...form,
+                            playType: event.target.value as BadmintonPlayType,
+                          })
+                        }
+                        className="mt-1 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
+                      >
+                        <option value="casual">Casual</option>
+                        <option value="practice">Practice</option>
+                        <option value="match">Match</option>
+                      </select>
+                    </label>
+
+                    <Input
+                      label="Games Played"
+                      type="number"
+                      value={String(form.gamesPlayed)}
+                      onChange={(value) =>
+                        setForm({ ...form, gamesPlayed: Number(value) })
+                      }
+                    />
+                  </>
+                )}
+
+                {(form.type === "walking" || form.type === "running") && (
+                  <>
+                    <Input
+                      label="Steps"
+                      type="number"
+                      value={String(form.steps)}
+                      onChange={(value) =>
+                        setForm({ ...form, steps: Number(value) })
+                      }
+                    />
+
+                    <Input
+                      label="Distance (km)"
+                      type="number"
+                      step="0.1"
+                      value={String(form.distanceKm)}
+                      onChange={(value) =>
+                        setForm({ ...form, distanceKm: Number(value) })
+                      }
+                    />
+                  </>
+                )}
+
+                {form.type === "swimming" && (
+                  <>
+                    <Input
+                      label="Swimming Meters"
+                      type="number"
+                      value={String(form.swimmingMeters)}
+                      onChange={(value) =>
+                        setForm({ ...form, swimmingMeters: Number(value) })
+                      }
+                    />
+
+                    <Input
+                      label="Laps"
+                      type="number"
+                      value={String(form.laps)}
+                      onChange={(value) =>
+                        setForm({ ...form, laps: Number(value) })
+                      }
+                    />
+                  </>
+                )}
+
+                {form.type === "home-workout" && (
+                  <>
+                    <Input
+                      label="Push-ups Sets"
+                      type="number"
+                      value={String(form.pushupSets)}
+                      onChange={(value) =>
+                        setForm({ ...form, pushupSets: Number(value) })
+                      }
+                    />
+
+                    <Input
+                      label="Push-ups Reps"
+                      type="number"
+                      value={String(form.pushupReps)}
+                      onChange={(value) =>
+                        setForm({ ...form, pushupReps: Number(value) })
+                      }
+                    />
+
+                    <Input
+                      label="Squat Sets"
+                      type="number"
+                      value={String(form.squatSets)}
+                      onChange={(value) =>
+                        setForm({ ...form, squatSets: Number(value) })
+                      }
+                    />
+
+                    <Input
+                      label="Squat Reps"
+                      type="number"
+                      value={String(form.squatReps)}
+                      onChange={(value) =>
+                        setForm({ ...form, squatReps: Number(value) })
+                      }
+                    />
+
+                    <Input
+                      label="Plank Sets"
+                      type="number"
+                      value={String(form.plankSets)}
+                      onChange={(value) =>
+                        setForm({ ...form, plankSets: Number(value) })
+                      }
+                    />
+
+                    <Input
+                      label="Plank Minutes / set"
+                      type="number"
+                      step="0.1"
+                      value={String(form.plankMinutes)}
+                      onChange={(value) =>
+                        setForm({ ...form, plankMinutes: Number(value) })
+                      }
+                    />
+                  </>
+                )}
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
+                <p className="text-sm text-emerald-300">Estimated Burn</p>
+                <p className="mt-2 text-4xl font-black">
+                  {liveEstimatedCalories}
+                  <span className="ml-1 text-lg text-zinc-400">kcal</span>
+                </p>
+                <p className="mt-2 text-xs text-zinc-400">
+                  Formula uses MET × weight × duration. Weight used: {selectedWeight} kg
+                </p>
+              </div>
+
+              <label className="mt-3 block">
+                <span className="text-xs text-zinc-500">Notes</span>
+                <textarea
+                  value={form.notes}
+                  onChange={(event) => setForm({ ...form, notes: event.target.value })}
+                  placeholder="เช่น ตีหนัก / เดินชิล / วันนี้เหนื่อย / เข่าโอเคไหม"
+                  className="mt-1 min-h-24 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
+                />
+              </label>
+
+              <button
+                onClick={saveWorkout}
+                className="mt-4 w-full rounded-2xl bg-emerald-400 px-5 py-3 font-bold text-zinc-950 transition hover:bg-emerald-300"
+              >
+                Save Workout + Sync
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
+            <p className="text-sm text-zinc-400">Today Summary</p>
+            <h2 className="mt-1 text-2xl font-bold">{formatDateForMenu(selectedDate)}</h2>
+
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <div className="rounded-3xl bg-zinc-950 p-5">
+                <p className="text-sm text-zinc-500">Workout Time</p>
+                <p className="mt-2 text-5xl font-black">
+                  {totalMinutes}
+                  <span className="ml-1 text-xl text-zinc-500">min</span>
+                </p>
+
+                <div className="mt-4 h-3 overflow-hidden rounded-full bg-zinc-800">
+                  <div
+                    className="h-full rounded-full bg-emerald-400 transition-all"
+                    style={{ width: `${workoutPercent}%` }}
+                  />
+                </div>
+
+                <p className="mt-3 text-sm text-zinc-400">
+                  Goal {goals.workoutGoal} min ·{" "}
+                  {workoutLeft > 0 ? `${workoutLeft} min left` : "target reached"}
+                </p>
+              </div>
+
+              <div className="rounded-3xl bg-zinc-950 p-5">
+                <p className="text-sm text-zinc-500">Estimated Burn</p>
+                <p className="mt-2 text-5xl font-black">
+                  {totalBurn}
+                  <span className="ml-1 text-xl text-zinc-500">kcal</span>
+                </p>
+
+                <p className="mt-4 text-sm leading-6 text-zinc-400">
+                  {getWorkoutCoachMessage({
+                    minutes: totalMinutes,
+                    calories: totalBurn,
+                    workoutGoal: goals.workoutGoal,
+                  })}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 rounded-3xl border border-zinc-800 bg-zinc-950 p-5">
+              <p className="text-sm text-zinc-400">Workout History</p>
+              <h3 className="mt-1 text-2xl font-bold">Workout logs</h3>
+
+              <div className="mt-5 grid gap-3">
+                {selectedLogs.length === 0 ? (
+                  <div className="rounded-2xl bg-zinc-900 p-5 text-sm text-zinc-500">
+                    No workout log for this date
                   </div>
-                ))
-            )}
+                ) : (
+                  selectedLogs
+                    .slice()
+                    .reverse()
+                    .map((log) => (
+                      <div
+                        key={log.id}
+                        className="rounded-2xl bg-zinc-900 p-4 text-sm"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-bold">{getWorkoutLabel(log.type)}</p>
+                            <p className="mt-1 text-zinc-500">
+                              {log.durationMinutes} min · {log.estimatedCalories} kcal
+                            </p>
+                            {log.type === "badminton" && (
+                              <p className="mt-1 text-zinc-500">
+                                {log.playType} · {log.gamesPlayed} games
+                              </p>
+                            )}
+                            {(log.type === "walking" || log.type === "running") && (
+                              <p className="mt-1 text-zinc-500">
+                                {log.distanceKm} km · {log.steps} steps
+                              </p>
+                            )}
+                            {log.notes && (
+                              <p className="mt-1 text-zinc-500">{log.notes}</p>
+                            )}
+                          </div>
+
+                          <button
+                            onClick={() => deleteWorkout(log.id)}
+                            className="rounded-xl border border-zinc-800 px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                )}
+              </div>
+            </div>
           </div>
         </section>
       </section>
@@ -1081,56 +1026,14 @@ export default function WorkoutPage() {
   );
 }
 
-function ExerciseSetReps({
-  title,
-  unit,
-  sets,
-  reps,
-  step = "1",
-  onSetsChange,
-  onRepsChange,
-}: {
-  title: string;
-  unit: string;
-  sets: number;
-  reps: number;
-  step?: string;
-  onSetsChange: (value: string) => void;
-  onRepsChange: (value: string) => void;
-}) {
+function QuickButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4 md:col-span-2">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <p className="font-bold">{title}</p>
-        <p className="text-xs text-zinc-500">
-          Total: {(Number(sets) * Number(reps)).toFixed(
-            unit.includes("min") ? 1 : 0
-          )}{" "}
-          {unit.includes("min") ? "min" : "reps"}
-        </p>
-      </div>
-
-      <div className="grid gap-3 md:grid-cols-2">
-        <Input label="Sets" type="number" value={String(sets)} onChange={onSetsChange} />
-
-        <Input
-          label={unit.includes("min") ? "Minutes / set" : "Reps / set"}
-          type="number"
-          value={String(reps)}
-          step={step}
-          onChange={onRepsChange}
-        />
-      </div>
-    </div>
-  );
-}
-
-function SmallStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0 rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
-      <p className="text-xs text-zinc-500">{label}</p>
-      <p className="mt-2 break-words text-2xl font-black leading-tight">{value}</p>
-    </div>
+    <button
+      onClick={onClick}
+      className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-left text-sm font-bold text-zinc-200 hover:bg-zinc-800"
+    >
+      {label}
+    </button>
   );
 }
 

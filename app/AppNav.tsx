@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 const desktopLinks = [
   { href: "/", label: "Dashboard" },
+  { href: "/today", label: "Today" },
   { href: "/plan", label: "Plan" },
   { href: "/food", label: "Food" },
   { href: "/workout", label: "Workout" },
@@ -16,7 +17,7 @@ const desktopLinks = [
 ];
 
 const mobileLinks = [
-  { href: "/", label: "Home", icon: "●" },
+  { href: "/today", label: "Home", icon: "●" },
   { href: "/plan", label: "Plan", icon: "✓" },
   { href: "/food", label: "Food", icon: "+" },
   { href: "/workout", label: "Workout", icon: "↗" },
@@ -36,7 +37,7 @@ export default function AppNav() {
       <header className="sticky top-0 z-50 -mx-5 mb-6 hidden border-b border-zinc-800/80 bg-zinc-950/90 px-5 py-3 backdrop-blur md:-mx-8 md:block md:px-8">
         <div className="no-scrollbar mx-auto flex w-full max-w-7xl items-center gap-3 overflow-x-auto pb-1">
           <Link
-            href="/"
+            href="/today"
             className="mr-1 shrink-0 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-sm font-black text-emerald-300"
           >
             Recode

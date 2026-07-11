@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const links = [
+const desktopLinks = [
   { href: "/", label: "Dashboard" },
   { href: "/plan", label: "Plan" },
   { href: "/food", label: "Food" },
@@ -15,7 +15,7 @@ const links = [
   { href: "/login", label: "Account" },
 ];
 
-const bottomLinks = [
+const mobileLinks = [
   { href: "/", label: "Home", icon: "●" },
   { href: "/plan", label: "Plan", icon: "✓" },
   { href: "/food", label: "Food", icon: "+" },
@@ -33,7 +33,7 @@ export default function AppNav() {
 
   return (
     <>
-      <header className="sticky top-0 z-50 -mx-5 mb-6 border-b border-zinc-800/80 bg-zinc-950/90 px-5 py-3 backdrop-blur md:-mx-8 md:px-8">
+      <header className="sticky top-0 z-50 -mx-5 mb-6 hidden border-b border-zinc-800/80 bg-zinc-950/90 px-5 py-3 backdrop-blur md:-mx-8 md:block md:px-8">
         <div className="mx-auto flex w-full max-w-7xl items-center gap-3 overflow-x-auto pb-1">
           <Link
             href="/"
@@ -43,7 +43,7 @@ export default function AppNav() {
           </Link>
 
           <nav className="flex min-w-max items-center gap-2">
-            {links.map((link) => {
+            {desktopLinks.map((link) => {
               const isActive = isActivePath(pathname, link.href);
 
               return (
@@ -64,9 +64,9 @@ export default function AppNav() {
         </div>
       </header>
 
-      <nav className="fixed bottom-0 left-0 right-0 z-[9999] border-t border-zinc-800 bg-zinc-950/95 px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-2 backdrop-blur">
+      <nav className="fixed bottom-0 left-0 right-0 z-[9999] border-t border-zinc-800 bg-zinc-950/95 px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-2 backdrop-blur md:hidden">
         <div className="mx-auto grid max-w-md grid-cols-5 gap-2">
-          {bottomLinks.map((link) => {
+          {mobileLinks.map((link) => {
             const isActive = isActivePath(pathname, link.href);
 
             return (
@@ -89,7 +89,7 @@ export default function AppNav() {
         </div>
       </nav>
 
-      <div className="h-24" />
+      <div className="h-24 md:hidden" />
     </>
   );
 }

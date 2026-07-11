@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -24,11 +24,11 @@ const secondaryLinks = [
 ];
 
 const mobileLinks = [
-  { href: "/today", label: "Home", icon: "●" },
-  { href: "/plan", label: "Plan", icon: "✓" },
+  { href: "/today", label: "Home", icon: "โ—" },
+  { href: "/plan", label: "Plan", icon: "โ“" },
   { href: "/food", label: "Food", icon: "+" },
-  { href: "/workout", label: "Move", icon: "↗" },
-  { href: "/more", label: "More", icon: "…" },
+  { href: "/workout", label: "Move", icon: "โ—" },
+  { href: "/more", label: "More", icon: "โ€ฆ" },
 ];
 
 function isActivePath(pathname: string, href: string) {
@@ -199,7 +199,7 @@ function SaveModeChip({ mode }: { mode: SaveMode }) {
         href="/account"
         className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-4 py-2 text-sm font-black text-emerald-200 hover:bg-emerald-400/15"
       >
-        ● Sync On
+        โ— Sync On
       </Link>
     );
   }
@@ -210,7 +210,7 @@ function SaveModeChip({ mode }: { mode: SaveMode }) {
         href="/account"
         className="rounded-full border border-amber-400/25 bg-amber-400/10 px-4 py-2 text-sm font-black text-amber-200 hover:bg-amber-400/15"
       >
-        ● Guest
+        โ— Guest
       </Link>
     );
   }
@@ -221,7 +221,7 @@ function SaveModeChip({ mode }: { mode: SaveMode }) {
         href="/account"
         className="rounded-full border border-red-400/25 bg-red-400/10 px-4 py-2 text-sm font-black text-red-200 hover:bg-red-400/15"
       >
-        ● Locked
+        โ— Locked
       </Link>
     );
   }

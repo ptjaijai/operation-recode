@@ -571,3 +571,4 @@ function MiniRule({
     </div>
   );
 }
+

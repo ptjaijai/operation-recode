@@ -1,4 +1,4 @@
-import type { Metadata, Viewport } from "next";
+﻿import type { Metadata, Viewport } from "next";
 import ServiceWorkerRegister from "./ServiceWorkerRegister";
 import "./globals.css";
 

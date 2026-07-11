@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import AppNav from "../AppNav";
@@ -471,7 +471,7 @@ export default function PlanPage() {
     {
       title: "Daily Check-in",
       done: Boolean(dailyLog),
-      detail: dailyLog ? "Baseline saved" : "Go to Dashboard and save today’s check-in",
+      detail: dailyLog ? "Baseline saved" : "Go to Dashboard and save todayโ€s check-in",
       href: "/",
     },
     {
@@ -581,7 +581,7 @@ export default function PlanPage() {
                 onClick={() => setSelectedDate(shiftDate(selectedDate, -1))}
                 className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-300 hover:bg-zinc-800"
               >
-                ← Prev
+                โ Prev
               </button>
 
               <button
@@ -595,7 +595,7 @@ export default function PlanPage() {
                 onClick={() => setSelectedDate(shiftDate(selectedDate, 1))}
                 className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-300 hover:bg-zinc-800"
               >
-                Next →
+                Next โ’
               </button>
 
               <select
@@ -605,7 +605,7 @@ export default function PlanPage() {
               >
                 {availableDates.map((date) => (
                   <option key={date} value={date}>
-                    {date === today ? "Today — " : ""}
+                    {date === today ? "Today โ€” " : ""}
                     {formatDateForMenu(date)}
                   </option>
                 ))}

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import AppNav from "../AppNav";
@@ -354,16 +354,16 @@ function getMainProblem({
   sweetDrinkCount: number;
   junkFoodCount: number;
 }) {
-  if (!hasDailyLog) return "ยังไม่ได้ลง Daily Check-in เลย ข้อมูลวันนี้ยังไม่ครบ";
-  if (sleep > 0 && sleep < sleepGoal - 1) return "นอนน้อย วันนี้เสี่ยงหิวและหลุดง่าย";
-  if (water < waterGoal) return "น้ำยังไม่ถึงเป้า อาจทำให้คิดว่าหิวทั้งที่จริง ๆ ขาดน้ำ";
-  if (protein < proteinGoal * 0.65) return "โปรตีนยังต่ำเกินไป ทำให้อิ่มยากและคุมแคลยาก";
-  if (calories > calorieGoal) return "แคลอรีอาหารเกินเป้าวันนี้แล้ว";
-  if (netCalories > calorieGoal) return "Net calories ยังเกิน หลังหักออกกำลังกาย";
-  if (workoutMinutes < workoutGoal) return "Movement ยังไม่ถึงเป้า";
-  if (sweetDrinkCount > 0) return "มีน้ำหวานวันนี้ จุดนี้ลดง่ายและเห็นผลเร็ว";
-  if (junkFoodCount > 0) return "มี junk food วันนี้ แต่ยังแก้เกมได้";
-  return "วันนี้ระบบดีแล้ว เหลือแค่รักษาไม่ให้หลุดช่วงท้ายวัน";
+  if (!hasDailyLog) return "เธขเธฑเธเนเธกเนเนเธ”เนเธฅเธ Daily Check-in เน€เธฅเธข เธเนเธญเธกเธนเธฅเธงเธฑเธเธเธตเนเธขเธฑเธเนเธกเนเธเธฃเธ";
+  if (sleep > 0 && sleep < sleepGoal - 1) return "เธเธญเธเธเนเธญเธข เธงเธฑเธเธเธตเนเน€เธชเธตเนเธขเธเธซเธดเธงเนเธฅเธฐเธซเธฅเธธเธ”เธเนเธฒเธข";
+  if (water < waterGoal) return "เธเนเธณเธขเธฑเธเนเธกเนเธ–เธถเธเน€เธเนเธฒ เธญเธฒเธเธ—เธณเนเธซเนเธเธดเธ”เธงเนเธฒเธซเธดเธงเธ—เธฑเนเธเธ—เธตเนเธเธฃเธดเธ เน เธเธฒเธ”เธเนเธณ";
+  if (protein < proteinGoal * 0.65) return "เนเธเธฃเธ•เธตเธเธขเธฑเธเธ•เนเธณเน€เธเธดเธเนเธ เธ—เธณเนเธซเนเธญเธดเนเธกเธขเธฒเธเนเธฅเธฐเธเธธเธกเนเธเธฅเธขเธฒเธ";
+  if (calories > calorieGoal) return "เนเธเธฅเธญเธฃเธตเธญเธฒเธซเธฒเธฃเน€เธเธดเธเน€เธเนเธฒเธงเธฑเธเธเธตเนเนเธฅเนเธง";
+  if (netCalories > calorieGoal) return "Net calories เธขเธฑเธเน€เธเธดเธ เธซเธฅเธฑเธเธซเธฑเธเธญเธญเธเธเธณเธฅเธฑเธเธเธฒเธข";
+  if (workoutMinutes < workoutGoal) return "Movement เธขเธฑเธเนเธกเนเธ–เธถเธเน€เธเนเธฒ";
+  if (sweetDrinkCount > 0) return "เธกเธตเธเนเธณเธซเธงเธฒเธเธงเธฑเธเธเธตเน เธเธธเธ”เธเธตเนเธฅเธ”เธเนเธฒเธขเนเธฅเธฐเน€เธซเนเธเธเธฅเน€เธฃเนเธง";
+  if (junkFoodCount > 0) return "เธกเธต junk food เธงเธฑเธเธเธตเน เนเธ•เนเธขเธฑเธเนเธเนเน€เธเธกเนเธ”เน";
+  return "เธงเธฑเธเธเธตเนเธฃเธฐเธเธเธ”เธตเนเธฅเนเธง เน€เธซเธฅเธทเธญเนเธเนเธฃเธฑเธเธฉเธฒเนเธกเนเนเธซเนเธซเธฅเธธเธ”เธเนเธงเธเธ—เนเธฒเธขเธงเธฑเธ";
 }
 
 function getStrategy({
@@ -392,34 +392,34 @@ function getStrategy({
   sleepGoal: number;
 }) {
   if (sleep > 0 && sleep < sleepGoal - 1) {
-    return "วันนี้ไม่ต้องเล่นหนักเพิ่ม ให้เน้นกินสะอาด ดื่มน้ำ และนอนคืนระบบ";
+    return "เธงเธฑเธเธเธตเนเนเธกเนเธ•เนเธญเธเน€เธฅเนเธเธซเธเธฑเธเน€เธเธดเนเธก เนเธซเนเน€เธเนเธเธเธดเธเธชเธฐเธญเธฒเธ” เธ”เธทเนเธกเธเนเธณ เนเธฅเธฐเธเธญเธเธเธทเธเธฃเธฐเธเธ";
   }
 
   if (water < waterGoal) {
-    return `ดื่มน้ำเพิ่มอีกประมาณ ${Math.max(waterGoal - water, 0).toFixed(
+    return `เธ”เธทเนเธกเธเนเธณเน€เธเธดเนเธกเธญเธตเธเธเธฃเธฐเธกเธฒเธ“ ${Math.max(waterGoal - water, 0).toFixed(
       1
-    )}L ก่อนตัดสินใจกิน snack`;
+    )}L เธเนเธญเธเธ•เธฑเธ”เธชเธดเธเนเธเธเธดเธ snack`;
   }
 
   if (protein < proteinGoal) {
-    return `เพิ่มโปรตีนอีกประมาณ ${Math.max(
+    return `เน€เธเธดเนเธกเนเธเธฃเธ•เธตเธเธญเธตเธเธเธฃเธฐเธกเธฒเธ“ ${Math.max(
       proteinGoal - protein,
       0
-    )}g โดยเลือกของง่าย เช่น เวย์ ไก่ ไข่ ทูน่า`;
+    )}g เนเธ”เธขเน€เธฅเธทเธญเธเธเธญเธเธเนเธฒเธข เน€เธเนเธ เน€เธงเธขเน เนเธเน เนเธเน เธ—เธนเธเนเธฒ`;
   }
 
   if (calories > calorieGoal || netCalories > calorieGoal) {
-    return "มื้อถัดไปให้เป็นโปรตีนลีน + ไม่เติมน้ำหวาน/ของทอด ไม่ต้องอดอาหาร";
+    return "เธกเธทเนเธญเธ–เธฑเธ”เนเธเนเธซเนเน€เธเนเธเนเธเธฃเธ•เธตเธเธฅเธตเธ + เนเธกเนเน€เธ•เธดเธกเธเนเธณเธซเธงเธฒเธ/เธเธญเธเธ—เธญเธ” เนเธกเนเธ•เนเธญเธเธญเธ”เธญเธฒเธซเธฒเธฃ";
   }
 
   if (workoutMinutes < workoutGoal) {
-    return `เพิ่ม movement อีก ${Math.max(
+    return `เน€เธเธดเนเธก movement เธญเธตเธ ${Math.max(
       workoutGoal - workoutMinutes,
       0
-    )} นาที เช่น เดินหรือยืดเบา ๆ`;
+    )} เธเธฒเธ—เธต เน€เธเนเธ เน€เธ”เธดเธเธซเธฃเธทเธญเธขเธทเธ”เน€เธเธฒ เน`;
   }
 
-  return "รักษา pattern นี้ไว้ พรุ่งนี้เน้นทำซ้ำ ไม่ต้องเพิ่มความโหด";
+  return "เธฃเธฑเธเธฉเธฒ pattern เธเธตเนเนเธงเน เธเธฃเธธเนเธเธเธตเนเน€เธเนเธเธ—เธณเธเนเธณ เนเธกเนเธ•เนเธญเธเน€เธเธดเนเธกเธเธงเธฒเธกเนเธซเธ”";
 }
 
 function getAvoidList({
@@ -439,11 +439,11 @@ function getAvoidList({
 }) {
   const avoid = [];
 
-  if (calories >= calorieGoal * 0.85) avoid.push("อย่าเพิ่ม snack แบบไม่จำเป็น");
-  if (sweetDrinkCount > 0) avoid.push("เลี่ยงน้ำหวานแก้วที่สอง");
-  if (junkFoodCount > 0) avoid.push("เลี่ยงของทอด/ขนมเพิ่ม");
-  if (sleep > 0 && sleep < sleepGoal) avoid.push("อย่านอนดึกซ้ำ");
-  if (avoid.length === 0) avoid.push("อย่าประมาทช่วงเย็น เพราะเป็นช่วงหลุดง่าย");
+  if (calories >= calorieGoal * 0.85) avoid.push("เธญเธขเนเธฒเน€เธเธดเนเธก snack เนเธเธเนเธกเนเธเธณเน€เธเนเธ");
+  if (sweetDrinkCount > 0) avoid.push("เน€เธฅเธตเนเธขเธเธเนเธณเธซเธงเธฒเธเนเธเนเธงเธ—เธตเนเธชเธญเธ");
+  if (junkFoodCount > 0) avoid.push("เน€เธฅเธตเนเธขเธเธเธญเธเธ—เธญเธ”/เธเธเธกเน€เธเธดเนเธก");
+  if (sleep > 0 && sleep < sleepGoal) avoid.push("เธญเธขเนเธฒเธเธญเธเธ”เธถเธเธเนเธณ");
+  if (avoid.length === 0) avoid.push("เธญเธขเนเธฒเธเธฃเธฐเธกเธฒเธ—เธเนเธงเธเน€เธขเนเธ เน€เธเธฃเธฒเธฐเน€เธเนเธเธเนเธงเธเธซเธฅเธธเธ”เธเนเธฒเธข");
 
   return avoid;
 }
@@ -464,18 +464,18 @@ function getTomorrowAdjustment({
   workoutGoal: number;
 }) {
   if (netCalories > calorieGoal) {
-    return "พรุ่งนี้เริ่มด้วยมื้อโปรตีนสูงก่อน อย่าแก้ด้วยการอดทั้งวัน";
+    return "เธเธฃเธธเนเธเธเธตเนเน€เธฃเธดเนเธกเธ”เนเธงเธขเธกเธทเนเธญเนเธเธฃเธ•เธตเธเธชเธนเธเธเนเธญเธ เธญเธขเนเธฒเนเธเนเธ”เนเธงเธขเธเธฒเธฃเธญเธ”เธ—เธฑเนเธเธงเธฑเธ";
   }
 
   if (protein < proteinGoal * 0.75) {
-    return "พรุ่งนี้วางโปรตีนไว้ตั้งแต่มื้อแรก ไม่รอแก้ตอนกลางคืน";
+    return "เธเธฃเธธเนเธเธเธตเนเธงเธฒเธเนเธเธฃเธ•เธตเธเนเธงเนเธ•เธฑเนเธเนเธ•เนเธกเธทเนเธญเนเธฃเธ เนเธกเนเธฃเธญเนเธเนเธ•เธญเธเธเธฅเธฒเธเธเธทเธ";
   }
 
   if (workoutMinutes < workoutGoal) {
-    return "พรุ่งนี้ล็อกเวลาเดินหรือ workout สั้น ๆ ไว้ก่อนเลย";
+    return "เธเธฃเธธเนเธเธเธตเนเธฅเนเธญเธเน€เธงเธฅเธฒเน€เธ”เธดเธเธซเธฃเธทเธญ workout เธชเธฑเนเธ เน เนเธงเนเธเนเธญเธเน€เธฅเธข";
   }
 
-  return "พรุ่งนี้ทำเหมือนเดิมได้ แต่เพิ่มความแม่นเรื่องแคลอรีให้มากขึ้น";
+  return "เธเธฃเธธเนเธเธเธตเนเธ—เธณเน€เธซเธกเธทเธญเธเน€เธ”เธดเธกเนเธ”เน เนเธ•เนเน€เธเธดเนเธกเธเธงเธฒเธกเนเธกเนเธเน€เธฃเธทเนเธญเธเนเธเธฅเธญเธฃเธตเนเธซเนเธกเธฒเธเธเธถเนเธ";
 }
 
 export default function CoachPage() {
@@ -723,7 +723,7 @@ export default function CoachPage() {
                 onClick={() => setSelectedDate(shiftDate(selectedDate, -1))}
                 className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-300 hover:bg-zinc-800"
               >
-                ← Prev
+                โ Prev
               </button>
 
               <button
@@ -737,7 +737,7 @@ export default function CoachPage() {
                 onClick={() => setSelectedDate(shiftDate(selectedDate, 1))}
                 className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-300 hover:bg-zinc-800"
               >
-                Next →
+                Next โ’
               </button>
 
               <select
@@ -747,7 +747,7 @@ export default function CoachPage() {
               >
                 {availableDates.map((date) => (
                   <option key={date} value={date}>
-                    {date === today ? "Today — " : ""}
+                    {date === today ? "Today โ€” " : ""}
                     {formatDateForMenu(date)}
                   </option>
                 ))}
@@ -792,7 +792,7 @@ export default function CoachPage() {
               <p className="text-sm text-zinc-400">Avoid Now</p>
               <ul className="mt-3 grid gap-2 text-sm text-zinc-300">
                 {avoidList.map((item) => (
-                  <li key={item}>• {item}</li>
+                  <li key={item}>โ€ข {item}</li>
                 ))}
               </ul>
             </div>

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import type { ChangeEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -354,7 +354,7 @@ export default function SettingsPage() {
             </p>
 
             <Link
-              href="/login"
+              href="/account"
               className="mt-4 inline-block rounded-2xl bg-red-400 px-5 py-3 text-sm font-black text-zinc-950"
             >
               Open Account
@@ -517,7 +517,7 @@ function ModeBadge({ mode }: { mode: SaveMode }) {
   if (mode === "sync") {
     return (
       <div className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-4 py-2 text-sm font-black text-emerald-200">
-        ● Sync On
+        โ— Sync On
       </div>
     );
   }
@@ -525,7 +525,7 @@ function ModeBadge({ mode }: { mode: SaveMode }) {
   if (mode === "guest") {
     return (
       <div className="rounded-full border border-amber-400/25 bg-amber-400/10 px-4 py-2 text-sm font-black text-amber-200">
-        ● Guest Mode
+        โ— Guest Mode
       </div>
     );
   }
@@ -533,7 +533,7 @@ function ModeBadge({ mode }: { mode: SaveMode }) {
   if (mode === "locked") {
     return (
       <div className="rounded-full border border-red-400/25 bg-red-400/10 px-4 py-2 text-sm font-black text-red-200">
-        ● Locked
+        โ— Locked
       </div>
     );
   }

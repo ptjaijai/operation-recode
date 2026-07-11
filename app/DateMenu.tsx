@@ -1,4 +1,4 @@
-type DateMenuProps = {
+﻿type DateMenuProps = {
   selectedDate: string;
   availableDates: string[];
   today: string;
@@ -58,7 +58,7 @@ export default function DateMenu({
             onClick={() => onChange(shiftDate(selectedDate, -1))}
             className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-300 hover:bg-zinc-800"
           >
-            ← Prev
+            โ Prev
           </button>
 
           <button
@@ -72,7 +72,7 @@ export default function DateMenu({
             onClick={() => onChange(shiftDate(selectedDate, 1))}
             className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-300 hover:bg-zinc-800"
           >
-            Next →
+            Next โ’
           </button>
 
           <select
@@ -82,7 +82,7 @@ export default function DateMenu({
           >
             {cleanDates.map((date) => (
               <option key={date} value={date}>
-                {date === today ? "Today — " : ""}
+                {date === today ? "Today โ€” " : ""}
                 {formatDateForMenu(date)}
               </option>
             ))}

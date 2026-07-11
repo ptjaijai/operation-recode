@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import AppNav from "../AppNav";
@@ -382,26 +382,26 @@ function getWeekComment({
   proteinHitDays: number;
 }) {
   if (avgScore >= 80 && weightChange < 0) {
-    return "อาทิตย์นี้ระบบดีมาก น้ำหนักลงและคะแนนรวมสูง ทำ pattern นี้ต่อได้เลย";
+    return "เธญเธฒเธ—เธดเธ•เธขเนเธเธตเนเธฃเธฐเธเธเธ”เธตเธกเธฒเธ เธเนเธณเธซเธเธฑเธเธฅเธเนเธฅเธฐเธเธฐเนเธเธเธฃเธงเธกเธชเธนเธ เธ—เธณ pattern เธเธตเนเธ•เนเธญเนเธ”เนเน€เธฅเธข";
   }
 
   if (avgNetCalories > calorieGoal) {
-    return "ปัญหาหลักของสัปดาห์นี้คือ net calories สูงเกินเป้า ควรลด snack/น้ำหวานก่อนเพิ่ม workout";
+    return "เธเธฑเธเธซเธฒเธซเธฅเธฑเธเธเธญเธเธชเธฑเธเธ”เธฒเธซเนเธเธตเนเธเธทเธญ net calories เธชเธนเธเน€เธเธดเธเน€เธเนเธฒ เธเธงเธฃเธฅเธ” snack/เธเนเธณเธซเธงเธฒเธเธเนเธญเธเน€เธเธดเนเธก workout";
   }
 
   if (proteinHitDays < 3) {
-    return "โปรตีนยังไม่สม่ำเสมอ ถ้าจะลดน้ำหนักแบบไม่โทรม ให้ล็อกโปรตีนก่อน";
+    return "เนเธเธฃเธ•เธตเธเธขเธฑเธเนเธกเนเธชเธกเนเธณเน€เธชเธกเธญ เธ–เนเธฒเธเธฐเธฅเธ”เธเนเธณเธซเธเธฑเธเนเธเธเนเธกเนเนเธ—เธฃเธก เนเธซเนเธฅเนเธญเธเนเธเธฃเธ•เธตเธเธเนเธญเธ";
   }
 
   if (weightChange > 0.5) {
-    return "น้ำหนักขึ้นในสัปดาห์นี้ อาจมาจากแคล/น้ำ/เค็ม/นอนน้อย ดู trend อีก 7 วัน อย่า panic";
+    return "เธเนเธณเธซเธเธฑเธเธเธถเนเธเนเธเธชเธฑเธเธ”เธฒเธซเนเธเธตเน เธญเธฒเธเธกเธฒเธเธฒเธเนเธเธฅ/เธเนเธณ/เน€เธเนเธก/เธเธญเธเธเนเธญเธข เธ”เธน trend เธญเธตเธ 7 เธงเธฑเธ เธญเธขเนเธฒ panic";
   }
 
   if (avgScore < 55) {
-    return "สัปดาห์นี้ระบบยังแกว่งมาก ให้เริ่มจาก Daily + Protein + Water ไม่ต้องทำทุกอย่างพร้อมกัน";
+    return "เธชเธฑเธเธ”เธฒเธซเนเธเธตเนเธฃเธฐเธเธเธขเธฑเธเนเธเธงเนเธเธกเธฒเธ เนเธซเนเน€เธฃเธดเนเธกเธเธฒเธ Daily + Protein + Water เนเธกเนเธ•เนเธญเธเธ—เธณเธ—เธธเธเธญเธขเนเธฒเธเธเธฃเนเธญเธกเธเธฑเธ";
   }
 
-  return "สัปดาห์นี้กลาง ๆ ยังมีจุดให้ optimize โดยเฉพาะความสม่ำเสมอของอาหารและการนอน";
+  return "เธชเธฑเธเธ”เธฒเธซเนเธเธตเนเธเธฅเธฒเธ เน เธขเธฑเธเธกเธตเธเธธเธ”เนเธซเน optimize เนเธ”เธขเน€เธเธเธฒเธฐเธเธงเธฒเธกเธชเธกเนเธณเน€เธชเธกเธญเธเธญเธเธญเธฒเธซเธฒเธฃเนเธฅเธฐเธเธฒเธฃเธเธญเธ";
 }
 
 export default function ProgressPage() {
@@ -666,7 +666,7 @@ export default function ProgressPage() {
                 onClick={() => setSelectedDate(shiftDate(selectedDate, -7))}
                 className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-300 hover:bg-zinc-800"
               >
-                ← Prev Week
+                โ Prev Week
               </button>
 
               <button
@@ -680,7 +680,7 @@ export default function ProgressPage() {
                 onClick={() => setSelectedDate(shiftDate(selectedDate, 7))}
                 className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-300 hover:bg-zinc-800"
               >
-                Next Week →
+                Next Week โ’
               </button>
 
               <select
@@ -690,7 +690,7 @@ export default function ProgressPage() {
               >
                 {availableDates.map((date) => (
                   <option key={date} value={date}>
-                    {date === today ? "Today — " : ""}
+                    {date === today ? "Today โ€” " : ""}
                     {formatDateForMenu(date)}
                   </option>
                 ))}
@@ -780,7 +780,7 @@ export default function ProgressPage() {
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               <SmallStat
                 label="Best Day"
-                value={bestDay ? `${formatShortDate(bestDay.date)} · ${bestDay.score}` : "-"}
+                value={bestDay ? `${formatShortDate(bestDay.date)} ยท ${bestDay.score}` : "-"}
               />
               <SmallStat label="Daily Check-ins" value={`${dailyCheckinDays}/7 days`} />
             </div>

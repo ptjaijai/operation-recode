@@ -3,13 +3,15 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const desktopLinks = [
-  { href: "/", label: "Dashboard" },
+const primaryLinks = [
   { href: "/today", label: "Today" },
   { href: "/plan", label: "Plan" },
   { href: "/food", label: "Food" },
   { href: "/workout", label: "Workout" },
   { href: "/coach", label: "Coach" },
+];
+
+const secondaryLinks = [
   { href: "/progress", label: "Progress" },
   { href: "/settings", label: "Settings" },
   { href: "/install", label: "Install" },
@@ -25,7 +27,7 @@ const mobileLinks = [
 ];
 
 function isActivePath(pathname: string, href: string) {
-  if (href === "/") return pathname === "/";
+  if (href === "/today") return pathname === "/" || pathname === "/today";
   return pathname.startsWith(href);
 }
 
@@ -34,17 +36,25 @@ export default function AppNav() {
 
   return (
     <>
-      <header className="sticky top-0 z-50 -mx-5 mb-6 hidden border-b border-zinc-800/80 bg-zinc-950/90 px-5 py-3 backdrop-blur md:-mx-8 md:block md:px-8">
-        <div className="no-scrollbar mx-auto flex w-full max-w-7xl items-center gap-3 overflow-x-auto pb-1">
-          <Link
-            href="/today"
-            className="mr-1 shrink-0 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-sm font-black text-emerald-300"
-          >
-            Recode
+      <header className="sticky top-0 z-50 -mx-5 mb-8 hidden border-b border-white/5 bg-zinc-950/85 px-5 py-4 backdrop-blur-xl md:-mx-8 md:block md:px-8">
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-6">
+          <Link href="/today" className="group flex items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-2xl bg-emerald-400 text-sm font-black text-zinc-950 shadow-[0_0_40px_rgba(52,211,153,0.18)]">
+              R
+            </div>
+
+            <div className="leading-none">
+              <p className="text-sm font-black tracking-tight text-white">
+                Recode
+              </p>
+              <p className="mt-1 text-[11px] font-medium text-zinc-500">
+                Operation System
+              </p>
+            </div>
           </Link>
 
-          <nav className="flex min-w-max items-center gap-2">
-            {desktopLinks.map((link) => {
+          <nav className="flex items-center rounded-full border border-white/5 bg-zinc-900/70 p-1 shadow-2xl shadow-black/20">
+            {primaryLinks.map((link) => {
               const isActive = isActivePath(pathname, link.href);
 
               return (
@@ -53,8 +63,8 @@ export default function AppNav() {
                   href={link.href}
                   className={
                     isActive
-                      ? "shrink-0 rounded-2xl bg-emerald-400 px-4 py-2 text-sm font-black text-zinc-950"
-                      : "shrink-0 rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-bold text-zinc-300 hover:bg-zinc-800"
+                      ? "rounded-full bg-white px-4 py-2 text-sm font-black text-zinc-950 shadow-sm"
+                      : "rounded-full px-4 py-2 text-sm font-bold text-zinc-400 transition hover:text-white"
                   }
                 >
                   {link.label}
@@ -62,10 +72,47 @@ export default function AppNav() {
               );
             })}
           </nav>
+
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <details className="group">
+                <summary className="list-none rounded-full border border-white/5 bg-zinc-900/70 px-4 py-2 text-sm font-bold text-zinc-300 transition hover:bg-zinc-800 hover:text-white">
+                  More
+                </summary>
+
+                <div className="absolute right-0 top-12 w-56 overflow-hidden rounded-3xl border border-white/10 bg-zinc-950 p-2 shadow-2xl shadow-black/40">
+                  {secondaryLinks.map((link) => {
+                    const isActive = isActivePath(pathname, link.href);
+
+                    return (
+                      <Link
+                        key={link.href}
+                        href={link.href}
+                        className={
+                          isActive
+                            ? "block rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-black text-zinc-950"
+                            : "block rounded-2xl px-4 py-3 text-sm font-bold text-zinc-400 transition hover:bg-zinc-900 hover:text-white"
+                        }
+                      >
+                        {link.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </details>
+            </div>
+
+            <Link
+              href="/login"
+              className="rounded-full bg-emerald-400 px-4 py-2 text-sm font-black text-zinc-950 transition hover:bg-emerald-300"
+            >
+              Sync
+            </Link>
+          </div>
         </div>
       </header>
 
-      <nav className="fixed bottom-0 left-0 right-0 z-[9999] border-t border-zinc-800 bg-zinc-950/95 px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-2 backdrop-blur md:hidden">
+      <nav className="fixed bottom-0 left-0 right-0 z-[9999] border-t border-white/5 bg-zinc-950/95 px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-2 backdrop-blur-xl md:hidden">
         <div className="mx-auto grid max-w-md grid-cols-5 gap-2">
           {mobileLinks.map((link) => {
             const isActive = isActivePath(pathname, link.href);
@@ -76,8 +123,8 @@ export default function AppNav() {
                 href={link.href}
                 className={
                   isActive
-                    ? "rounded-2xl bg-emerald-400 px-2 py-2 text-center text-xs font-black text-zinc-950"
-                    : "rounded-2xl border border-zinc-800 bg-zinc-900 px-2 py-2 text-center text-xs font-bold text-zinc-400"
+                    ? "rounded-2xl bg-white px-2 py-2 text-center text-xs font-black text-zinc-950"
+                    : "rounded-2xl px-2 py-2 text-center text-xs font-bold text-zinc-500"
                 }
               >
                 <span className="block text-base leading-none">{link.icon}</span>

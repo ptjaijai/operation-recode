@@ -1,8 +1,9 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import AppNav from "../AppNav";
 import { createClient } from "../../lib/supabase/client";
+import { canSaveWithoutLogin, getSaveLockMessage } from "../../lib/recode/auth-mode";
 
 type WorkoutType =
   | "badminton"
@@ -353,7 +354,7 @@ function getWorkoutCoachMessage({
   }
 
   if (minutes < workoutGoal) {
-    return `Good start. You are ${workoutGoal - minutes} minutes short of today’s workout goal.`;
+    return `Good start. You are ${workoutGoal - minutes} minutes short of todayโ€s workout goal.`;
   }
 
   if (calories >= 500) {
@@ -724,7 +725,7 @@ export default function WorkoutPage() {
                 onClick={() => setSelectedDate(shiftDate(selectedDate, -1))}
                 className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-300 hover:bg-zinc-800"
               >
-                ← Prev
+                โ Prev
               </button>
 
               <button
@@ -738,7 +739,7 @@ export default function WorkoutPage() {
                 onClick={() => setSelectedDate(shiftDate(selectedDate, 1))}
                 className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-300 hover:bg-zinc-800"
               >
-                Next →
+                Next โ’
               </button>
 
               <select
@@ -748,7 +749,7 @@ export default function WorkoutPage() {
               >
                 {availableDates.map((date) => (
                   <option key={date} value={date}>
-                    {date === today ? "Today — " : ""}
+                    {date === today ? "Today โ€” " : ""}
                     {formatDateForMenu(date)}
                   </option>
                 ))}
@@ -964,7 +965,7 @@ export default function WorkoutPage() {
                   <span className="ml-1 text-lg text-zinc-400">kcal</span>
                 </p>
                 <p className="mt-2 text-xs text-zinc-400">
-                  Formula uses MET × weight × duration. Weight used: {selectedWeight} kg
+                  Formula uses MET ร— weight ร— duration. Weight used: {selectedWeight} kg
                 </p>
               </div>
 
@@ -1016,7 +1017,7 @@ export default function WorkoutPage() {
                 </div>
 
                 <p className="mt-3 text-sm text-zinc-400">
-                  Goal {goals.workoutGoal} min ·{" "}
+                  Goal {goals.workoutGoal} min ยท{" "}
                   {workoutLeft > 0 ? `${workoutLeft} min left` : "target reached"}
                 </p>
               </div>
@@ -1064,28 +1065,28 @@ export default function WorkoutPage() {
                           <div>
                             <p className="font-bold">{getWorkoutLabel(log.type)}</p>
                             <p className="mt-1 text-zinc-500">
-                              {log.durationMinutes} min · {log.estimatedCalories} kcal
+                              {log.durationMinutes} min ยท {log.estimatedCalories} kcal
                             </p>
                             {log.type === "badminton" && (
                               <p className="mt-1 text-zinc-500">
-                                {log.playType} · {log.gamesPlayed} games
+                                {log.playType} ยท {log.gamesPlayed} games
                               </p>
                             )}
                             {(log.type === "walking" || log.type === "running") && (
                               <p className="mt-1 text-zinc-500">
-                                {log.distanceKm} km · {log.steps} steps
+                                {log.distanceKm} km ยท {log.steps} steps
                               </p>
                             )}
                             {log.type === "swimming" && (
                               <p className="mt-1 text-zinc-500">
-                                {log.swimmingMeters} m · {log.laps} laps
+                                {log.swimmingMeters} m ยท {log.laps} laps
                               </p>
                             )}
                             {log.type === "home-workout" && (
                               <p className="mt-1 text-zinc-500">
-                                Push {log.pushupSets}×{log.pushupReps} · Squat{" "}
-                                {log.squatSets}×{log.squatReps} · Plank{" "}
-                                {log.plankSets}×{log.plankMinutes}m
+                                Push {log.pushupSets}ร—{log.pushupReps} ยท Squat{" "}
+                                {log.squatSets}ร—{log.squatReps} ยท Plank{" "}
+                                {log.plankSets}ร—{log.plankMinutes}m
                               </p>
                             )}
                             {log.notes && (
@@ -1160,3 +1161,4 @@ function Input({
     </label>
   );
 }
+

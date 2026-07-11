@@ -1,8 +1,9 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import AppNav from "../AppNav";
 import { createClient } from "../../lib/supabase/client";
+import { canSaveWithoutLogin, getSaveLockMessage } from "../../lib/recode/auth-mode";
 
 type MealType = "breakfast" | "lunch" | "dinner" | "snack" | "drink" | "other";
 
@@ -319,7 +320,7 @@ function getFoodCoachMessage({
     return "Protein target reached. Good. Now avoid random snacks.";
   }
 
-  return `Good progress. About ${proteinLeft}g protein left to hit today’s goal.`;
+  return `Good progress. About ${proteinLeft}g protein left to hit todayโ€s goal.`;
 }
 
 export default function FoodPage() {
@@ -643,7 +644,7 @@ export default function FoodPage() {
                 onClick={() => setSelectedDate(shiftDate(selectedDate, -1))}
                 className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-300 hover:bg-zinc-800"
               >
-                ← Prev
+                โ Prev
               </button>
 
               <button
@@ -657,7 +658,7 @@ export default function FoodPage() {
                 onClick={() => setSelectedDate(shiftDate(selectedDate, 1))}
                 className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-300 hover:bg-zinc-800"
               >
-                Next →
+                Next โ’
               </button>
 
               <select
@@ -667,7 +668,7 @@ export default function FoodPage() {
               >
                 {availableDates.map((date) => (
                   <option key={date} value={date}>
-                    {date === today ? "Today — " : ""}
+                    {date === today ? "Today โ€” " : ""}
                     {formatDateForMenu(date)}
                   </option>
                 ))}
@@ -697,7 +698,7 @@ export default function FoodPage() {
                   <div>
                     <p className="font-bold">{preset.name}</p>
                     <p className="mt-1 text-sm text-zinc-500">
-                      {preset.protein}g protein · {preset.calories} kcal ·{" "}
+                      {preset.protein}g protein ยท {preset.calories} kcal ยท{" "}
                       {getMealLabel(preset.mealType)}
                     </p>
                   </div>
@@ -846,7 +847,7 @@ export default function FoodPage() {
                 </div>
 
                 <p className="mt-3 text-sm text-zinc-400">
-                  Score {proteinScore}/100 ·{" "}
+                  Score {proteinScore}/100 ยท{" "}
                   {proteinLeft > 0 ? `${proteinLeft}g left` : "target reached"}
                 </p>
               </div>
@@ -866,7 +867,7 @@ export default function FoodPage() {
                 </div>
 
                 <p className="mt-3 text-sm text-zinc-400">
-                  Goal {goals.calorieGoal} kcal ·{" "}
+                  Goal {goals.calorieGoal} kcal ยท{" "}
                   {getCalorieText(totalCalories, goals.calorieGoal)}
                 </p>
               </div>
@@ -918,11 +919,11 @@ export default function FoodPage() {
                           <div>
                             <p className="font-bold">{log.foodName}</p>
                             <p className="mt-1 text-zinc-500">
-                              {getMealLabel(log.mealType)} · {log.protein}g protein ·{" "}
+                              {getMealLabel(log.mealType)} ยท {log.protein}g protein ยท{" "}
                               {log.calories} kcal
                             </p>
                             <p className="mt-1 text-zinc-500">
-                              {log.sweetDrink ? "Sweet drink" : "No sweet drink"} ·{" "}
+                              {log.sweetDrink ? "Sweet drink" : "No sweet drink"} ยท{" "}
                               {log.junkFood ? "Junk food" : "Not junk"}
                             </p>
                             {log.notes && (
@@ -995,3 +996,4 @@ function SmallStat({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+

@@ -235,3 +235,83 @@ textarea:focus {
     max-width: min(90vw, 104rem) !important;
   }
 }
+
+/* App-wide desktop frame polish */
+@media (min-width: 1024px) {
+  main {
+    min-height: 100vh;
+  }
+
+  main > section.mx-auto {
+    width: min(92vw, 96rem) !important;
+    max-width: min(92vw, 96rem) !important;
+  }
+
+  .rounded-3xl {
+    border-radius: 1.75rem;
+  }
+
+  .rounded-\[2rem\] {
+    border-radius: 1.75rem;
+  }
+
+  h1 {
+    letter-spacing: -0.055em;
+  }
+
+  h2 {
+    letter-spacing: -0.035em;
+  }
+}
+
+@media (min-width: 1440px) {
+  main > section.mx-auto {
+    width: min(90vw, 104rem) !important;
+    max-width: min(90vw, 104rem) !important;
+  }
+}
+
+/* More premium card feel across old pages */
+main section[class*="border-zinc-800"][class*="bg-zinc-900"],
+main div[class*="border-zinc-800"][class*="bg-zinc-900"],
+main section[class*="bg-zinc-900/80"],
+main div[class*="bg-zinc-900/80"] {
+  border-color: rgba(255, 255, 255, 0.08);
+  background-color: rgba(24, 24, 27, 0.68);
+  backdrop-filter: blur(16px);
+}
+
+/* Make old black inner cards less flat */
+main div[class*="bg-zinc-950"],
+main section[class*="bg-zinc-950"] {
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+/* Cleaner form controls across old pages */
+main input,
+main select,
+main textarea {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  background-color: rgba(0, 0, 0, 0.28) !important;
+}
+
+main input:focus,
+main select:focus,
+main textarea:focus {
+  border-color: rgba(52, 211, 153, 0.65) !important;
+}
+
+/* Buttons should feel less bulky on desktop */
+@media (min-width: 1024px) {
+  main button,
+  main a {
+    letter-spacing: -0.01em;
+  }
+}
+
+/* Keep bottom mobile nav from affecting desktop rhythm */
+@media (min-width: 768px) {
+  body {
+    padding-bottom: 0;
+  }
+}

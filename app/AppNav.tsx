@@ -1,7 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
+import { createClient } from "../lib/supabase/client";
+import { getAuthMode } from "../lib/recode/auth-mode";
+
+type SaveMode = "loading" | "sync" | "guest" | "locked";
 
 const primaryLinks = [
   { href: "/today", label: "Today" },
@@ -33,6 +38,58 @@ function isActivePath(pathname: string, href: string) {
 
 export default function AppNav() {
   const pathname = usePathname();
+  const [saveMode, setSaveMode] = useState<SaveMode>("loading");
+
+  useEffect(() => {
+    const supabase = createClient();
+
+    async function checkSaveMode() {
+      const { data } = await supabase.auth.getSession();
+
+      if (data.session?.user) {
+        setSaveMode("sync");
+        return;
+      }
+
+      if (getAuthMode() === "guest") {
+        setSaveMode("guest");
+        return;
+      }
+
+      setSaveMode("locked");
+    }
+
+    checkSaveMode();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setSaveMode("sync");
+        return;
+      }
+
+      if (getAuthMode() === "guest") {
+        setSaveMode("guest");
+        return;
+      }
+
+      setSaveMode("locked");
+    });
+
+    function handleStorageChange() {
+      checkSaveMode();
+    }
+
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("focus", handleStorageChange);
+
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("focus", handleStorageChange);
+    };
+  }, []);
 
   return (
     <>
@@ -100,12 +157,7 @@ export default function AppNav() {
               </div>
             </details>
 
-            <Link
-              href="/login"
-              className="rounded-full bg-emerald-400 px-4 py-2 text-sm font-black text-zinc-950 hover:bg-emerald-300"
-            >
-              Sync
-            </Link>
+            <SaveModeChip mode={saveMode} />
           </div>
         </div>
       </header>
@@ -137,5 +189,49 @@ export default function AppNav() {
 
       <div className="h-24 md:hidden" />
     </>
+  );
+}
+
+function SaveModeChip({ mode }: { mode: SaveMode }) {
+  if (mode === "sync") {
+    return (
+      <Link
+        href="/login"
+        className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-4 py-2 text-sm font-black text-emerald-200 hover:bg-emerald-400/15"
+      >
+        ● Sync On
+      </Link>
+    );
+  }
+
+  if (mode === "guest") {
+    return (
+      <Link
+        href="/login"
+        className="rounded-full border border-amber-400/25 bg-amber-400/10 px-4 py-2 text-sm font-black text-amber-200 hover:bg-amber-400/15"
+      >
+        ● Guest
+      </Link>
+    );
+  }
+
+  if (mode === "locked") {
+    return (
+      <Link
+        href="/login"
+        className="rounded-full border border-red-400/25 bg-red-400/10 px-4 py-2 text-sm font-black text-red-200 hover:bg-red-400/15"
+      >
+        ● Locked
+      </Link>
+    );
+  }
+
+  return (
+    <Link
+      href="/login"
+      className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-black text-zinc-400"
+    >
+      Checking
+    </Link>
   );
 }

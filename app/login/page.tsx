@@ -1,60 +1,86 @@
 "use client";
 
+import type { User } from "@supabase/supabase-js";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import AppNav from "../AppNav";
 import { createClient } from "../../lib/supabase/client";
+import {
+  disableGuestMode,
+  enableGuestMode,
+  getAuthMode,
+} from "../../lib/recode/auth-mode";
+
+type AccountMode = "loading" | "logged-in" | "guest" | "locked";
 
 export default function LoginPage() {
   const [supabase] = useState(() => createClient());
+  const [mode, setMode] = useState<AccountMode>("loading");
+  const [user, setUser] = useState<User | null>(null);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   const [newPassword, setNewPassword] = useState("");
-  const [userEmail, setUserEmail] = useState("");
-
   const [canSetNewPassword, setCanSetNewPassword] = useState(false);
-  const [status, setStatus] = useState("Checking session...");
-  const [loading, setLoading] = useState(false);
+
+  const [message, setMessage] = useState("Checking account...");
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    async function loadUser() {
-      const { data, error } = await supabase.auth.getUser();
+    async function loadAccount() {
+      const { data } = await supabase.auth.getSession();
+      const currentUser = data.session?.user ?? null;
 
-      if (error || !data.user) {
-        setUserEmail("");
-        setStatus("You are not signed in.");
+      setUser(currentUser);
+
+      if (currentUser) {
+        disableGuestMode();
+        setMode("logged-in");
+        setMessage("Cloud sync is active.");
         return;
       }
 
-      setUserEmail(data.user.email ?? "");
-      setEmail(data.user.email ?? "");
-      setStatus("You are signed in.");
+      if (getAuthMode() === "guest") {
+        setMode("guest");
+        setMessage("Guest Mode is active. Data saves only on this device.");
+        return;
+      }
+
+      setMode("locked");
+      setMessage("Choose Login or Guest Mode before saving data.");
     }
 
-    loadUser();
+    loadAccount();
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
+      const currentUser = session?.user ?? null;
+
+      setUser(currentUser);
+
       if (event === "PASSWORD_RECOVERY") {
         setCanSetNewPassword(true);
-        setUserEmail(session?.user.email ?? "");
-        setEmail(session?.user.email ?? "");
-        setStatus("Reset link verified. Set your new password below.");
+        setMessage("Enter your new password.");
         return;
       }
 
-      if (event === "SIGNED_IN") {
-        setUserEmail(session?.user.email ?? "");
-        setEmail(session?.user.email ?? "");
+      if (currentUser) {
+        disableGuestMode();
+        setMode("logged-in");
+        setMessage("Cloud sync is active.");
+        return;
       }
 
-      if (event === "SIGNED_OUT") {
-        setUserEmail("");
-        setCanSetNewPassword(false);
-        setNewPassword("");
+      if (getAuthMode() === "guest") {
+        setMode("guest");
+        setMessage("Guest Mode is active. Data saves only on this device.");
+        return;
       }
+
+      setMode("locked");
+      setMessage("Choose Login or Guest Mode before saving data.");
     });
 
     return () => {
@@ -62,280 +88,486 @@ export default function LoginPage() {
     };
   }, [supabase]);
 
-  async function signUp() {
-    if (!email || !password) {
-      setStatus("Enter your email and password first.");
-      return;
-    }
-
-    if (password.length < 6) {
-      setStatus("Password must be at least 6 characters.");
-      return;
-    }
-
-    setLoading(true);
-    setStatus("Creating account...");
-
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
-
-    setLoading(false);
-
-    if (error) {
-      setStatus(error.message);
-      return;
-    }
-
-    setStatus("Account created. Check your email if confirmation is required.");
-  }
-
   async function signIn() {
-    if (!email || !password) {
-      setStatus("Enter your email and password first.");
+    if (!email.trim() || !password.trim()) {
+      setMessage("Enter email and password first.");
       return;
     }
 
-    setLoading(true);
-    setStatus("Signing in...");
+    setIsLoading(true);
+    setMessage("Logging in...");
 
     const { data, error } = await supabase.auth.signInWithPassword({
-      email,
+      email: email.trim(),
       password,
     });
 
-    setLoading(false);
+    setIsLoading(false);
 
     if (error) {
-      setStatus(error.message);
+      setMessage(error.message);
       return;
     }
 
-    setUserEmail(data.user.email ?? "");
-    setStatus("Signed in. Redirecting...");
-    window.location.href = "/";
+    disableGuestMode();
+    setUser(data.user);
+    setMode("logged-in");
+    setMessage("Logged in. Cloud sync is active.");
+  }
+
+  async function signUp() {
+    if (!email.trim() || !password.trim()) {
+      setMessage("Enter email and password first.");
+      return;
+    }
+
+    setIsLoading(true);
+    setMessage("Creating account...");
+
+    const { data, error } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
+    });
+
+    setIsLoading(false);
+
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+
+    if (data.user) {
+      disableGuestMode();
+      setUser(data.user);
+      setMode("logged-in");
+      setMessage("Account created. Cloud sync is active.");
+      return;
+    }
+
+    setMessage("Account created. Check your email to confirm.");
   }
 
   async function signOut() {
-    setLoading(true);
-    setStatus("Signing out...");
+    setIsLoading(true);
+    setMessage("Signing out...");
 
-    const { error } = await supabase.auth.signOut();
+    await supabase.auth.signOut();
 
-    setLoading(false);
-
-    if (error) {
-      setStatus(error.message);
-      return;
-    }
-
-    setUserEmail("");
-    setPassword("");
-    setNewPassword("");
-    setCanSetNewPassword(false);
-    setStatus("Signed out.");
+    setIsLoading(false);
+    setUser(null);
+    disableGuestMode();
+    setMode("locked");
+    setMessage("Signed out. Choose Login or Guest Mode before saving.");
   }
 
-  async function sendResetPasswordEmail() {
-    if (!email) {
-      setStatus("Enter your email first.");
+  function continueGuest() {
+    enableGuestMode();
+    setUser(null);
+    setMode("guest");
+    setMessage("Guest Mode is active. Data saves only on this device.");
+  }
+
+  function exitGuest() {
+    disableGuestMode();
+    setUser(null);
+    setMode("locked");
+    setMessage("Guest Mode off. Choose Login or Guest Mode before saving.");
+  }
+
+  async function sendResetEmail() {
+    if (!email.trim()) {
+      setMessage("Enter your email first.");
       return;
     }
 
-    setLoading(true);
-    setStatus("Sending reset link...");
+    setIsLoading(true);
+    setMessage("Sending reset email...");
 
-    const redirectTo = `${window.location.origin}/login`;
+    const redirectTo =
+      typeof window !== "undefined" ? `${window.location.origin}/login` : undefined;
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
       redirectTo,
     });
 
-    setLoading(false);
+    setIsLoading(false);
 
     if (error) {
-      setStatus(error.message);
+      setMessage(error.message);
       return;
     }
 
-    setStatus("Reset link sent. Open the email to continue.");
+    setMessage("Reset email sent. Open the link from your email.");
   }
 
-  async function saveNewPasswordFromEmailLink() {
-    if (!canSetNewPassword) {
-      setStatus("Open the password reset link from your email first.");
+  async function updatePassword() {
+    if (!newPassword.trim()) {
+      setMessage("Enter new password first.");
       return;
     }
 
-    if (newPassword.length < 6) {
-      setStatus("New password must be at least 6 characters.");
-      return;
-    }
-
-    setLoading(true);
-    setStatus("Updating password...");
+    setIsLoading(true);
+    setMessage("Updating password...");
 
     const { error } = await supabase.auth.updateUser({
       password: newPassword,
     });
 
-    setLoading(false);
+    setIsLoading(false);
 
     if (error) {
-      setStatus(error.message);
+      setMessage(error.message);
       return;
     }
 
-    setNewPassword("");
     setCanSetNewPassword(false);
-    setStatus("Password updated. You can now sign in with your new password.");
+    setNewPassword("");
+    setMessage("Password updated.");
+  }
+
+  const isLoggedIn = mode === "logged-in";
+  const isGuest = mode === "guest";
+  const isLocked = mode === "locked";
+
+  return (
+    <main className="min-h-screen text-white">
+      <section className="recode-shell mx-auto min-h-screen w-full max-w-7xl px-5 py-6 md:px-8">
+        <AppNav />
+
+        <section className="mb-8 flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
+          <div>
+            <p className="recode-kicker">Operation: Recode</p>
+            <h1 className="mt-3 text-5xl font-black tracking-tight md:text-7xl">
+              Account
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400 md:text-base">
+              Login for cloud sync, or use Guest Mode for local-only saving.
+            </p>
+          </div>
+
+          <ModeBadge mode={mode} />
+        </section>
+
+        <section className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
+          <section className="space-y-5">
+            <section
+              className={
+                isLoggedIn
+                  ? "recode-card-strong rounded-[2rem] p-6 md:p-8"
+                  : isGuest
+                  ? "rounded-[2rem] border border-amber-400/25 bg-amber-400/10 p-6 shadow-2xl shadow-black/20 backdrop-blur-xl md:p-8"
+                  : "recode-card rounded-[2rem] p-6 md:p-8"
+              }
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-black uppercase tracking-[0.25em] text-zinc-500">
+                    Save Mode
+                  </p>
+
+                  <h2 className="mt-4 text-4xl font-black tracking-tight md:text-5xl">
+                    {isLoggedIn && "Cloud Sync"}
+                    {isGuest && "Guest Mode"}
+                    {isLocked && "Not Set"}
+                    {mode === "loading" && "Checking"}
+                  </h2>
+                </div>
+
+                <div
+                  className={
+                    isLoggedIn
+                      ? "rounded-full bg-emerald-400 px-3 py-1 text-xs font-black text-zinc-950"
+                      : isGuest
+                      ? "rounded-full bg-amber-400 px-3 py-1 text-xs font-black text-zinc-950"
+                      : "rounded-full bg-zinc-800 px-3 py-1 text-xs font-black text-zinc-300"
+                  }
+                >
+                  {isLoggedIn && "SYNC ON"}
+                  {isGuest && "LOCAL"}
+                  {isLocked && "LOCKED"}
+                  {mode === "loading" && "..."}
+                </div>
+              </div>
+
+              <p className="mt-5 text-sm leading-6 text-zinc-300">{message}</p>
+
+              <div className="mt-6 grid gap-3">
+                {isLoggedIn && (
+                  <>
+                    <StatusRow label="Account" value={user?.email ?? "-"} />
+                    <StatusRow label="Saving" value="Cloud + local backup" />
+                    <StatusRow label="Use case" value="Best for phone + computer" />
+                  </>
+                )}
+
+                {isGuest && (
+                  <>
+                    <StatusRow label="Account" value="No account" />
+                    <StatusRow label="Saving" value="This browser only" />
+                    <StatusRow label="Sync" value="Off" />
+                  </>
+                )}
+
+                {isLocked && (
+                  <>
+                    <StatusRow label="Saving" value="Blocked" />
+                    <StatusRow label="Required" value="Login or Guest Mode" />
+                    <StatusRow label="Reason" value="Prevent accidental local data" />
+                  </>
+                )}
+              </div>
+
+              <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                {isLoggedIn && (
+                  <button
+                    onClick={signOut}
+                    disabled={isLoading}
+                    className="recode-button-ghost"
+                  >
+                    Sign Out
+                  </button>
+                )}
+
+                {isGuest && (
+                  <button
+                    onClick={exitGuest}
+                    disabled={isLoading}
+                    className="recode-button-ghost"
+                  >
+                    Exit Guest Mode
+                  </button>
+                )}
+
+                {isLocked && (
+                  <button
+                    onClick={continueGuest}
+                    disabled={isLoading}
+                    className="rounded-2xl border border-amber-400/25 bg-amber-400/10 px-5 py-4 text-sm font-black text-amber-200 hover:bg-amber-400/15"
+                  >
+                    Continue as Guest
+                  </button>
+                )}
+
+                <Link href="/today" className="recode-button-primary text-center">
+                  Open Today
+                </Link>
+              </div>
+            </section>
+
+            <section className="grid gap-3 md:grid-cols-3">
+              <MiniRule
+                title="Locked"
+                text="Cannot save yet"
+                active={isLocked}
+              />
+              <MiniRule
+                title="Guest"
+                text="Save local only"
+                active={isGuest}
+              />
+              <MiniRule
+                title="Login"
+                text="Cloud sync on"
+                active={isLoggedIn}
+              />
+            </section>
+          </section>
+
+          <section className="space-y-5">
+            {!isLoggedIn && (
+              <section className="recode-card rounded-[2rem] p-6 md:p-8">
+                <p className="text-sm font-black uppercase tracking-[0.25em] text-zinc-500">
+                  Login
+                </p>
+
+                <h2 className="mt-3 text-3xl font-black tracking-tight">
+                  Use cloud sync
+                </h2>
+
+                <div className="mt-6 grid gap-4">
+                  <label className="block">
+                    <span className="recode-label">Email</span>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      placeholder="you@email.com"
+                      className="recode-input"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="recode-label">Password</span>
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      placeholder="Password"
+                      className="recode-input"
+                    />
+                  </label>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <button
+                      onClick={signIn}
+                      disabled={isLoading}
+                      className="recode-button-primary"
+                    >
+                      Login
+                    </button>
+
+                    <button
+                      onClick={signUp}
+                      disabled={isLoading}
+                      className="recode-button-ghost"
+                    >
+                      Create Account
+                    </button>
+                  </div>
+
+                  <button
+                    onClick={sendResetEmail}
+                    disabled={isLoading}
+                    className="text-left text-sm font-bold text-zinc-500 hover:text-white"
+                  >
+                    Forgot password? Send reset email
+                  </button>
+                </div>
+              </section>
+            )}
+
+            {canSetNewPassword && (
+              <section className="recode-card rounded-[2rem] p-6 md:p-8">
+                <p className="text-sm font-black uppercase tracking-[0.25em] text-zinc-500">
+                  Recovery
+                </p>
+
+                <h2 className="mt-3 text-3xl font-black tracking-tight">
+                  Set new password
+                </h2>
+
+                <div className="mt-6 grid gap-4">
+                  <label className="block">
+                    <span className="recode-label">New Password</span>
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={(event) => setNewPassword(event.target.value)}
+                      placeholder="New password"
+                      className="recode-input"
+                    />
+                  </label>
+
+                  <button
+                    onClick={updatePassword}
+                    disabled={isLoading}
+                    className="recode-button-primary"
+                  >
+                    Update Password
+                  </button>
+                </div>
+              </section>
+            )}
+
+            {isLoggedIn && (
+              <section className="recode-card rounded-[2rem] p-6 md:p-8">
+                <p className="text-sm font-black uppercase tracking-[0.25em] text-zinc-500">
+                  Ready
+                </p>
+
+                <h2 className="mt-3 text-3xl font-black tracking-tight">
+                  Your account is active
+                </h2>
+
+                <p className="mt-4 text-sm leading-6 text-zinc-400">
+                  Food, workout, daily check-in, and goals can sync between your computer and phone.
+                </p>
+
+                <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                  <Link href="/today" className="recode-button-primary text-center">
+                    Open Today
+                  </Link>
+
+                  <Link href="/settings" className="recode-button-ghost text-center">
+                    Settings
+                  </Link>
+                </div>
+              </section>
+            )}
+
+            <section className="rounded-[2rem] border border-white/5 bg-black/20 p-6">
+              <p className="text-sm font-black text-zinc-300">Note</p>
+              <p className="mt-2 text-sm leading-6 text-zinc-500">
+                Guest Mode is useful for testing. For real tracking across devices, use Login.
+              </p>
+            </section>
+          </section>
+        </section>
+      </section>
+    </main>
+  );
+}
+
+function ModeBadge({ mode }: { mode: AccountMode }) {
+  if (mode === "logged-in") {
+    return (
+      <div className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-4 py-2 text-sm font-black text-emerald-200">
+        ● Logged in
+      </div>
+    );
+  }
+
+  if (mode === "guest") {
+    return (
+      <div className="rounded-full border border-amber-400/25 bg-amber-400/10 px-4 py-2 text-sm font-black text-amber-200">
+        ● Guest Mode
+      </div>
+    );
+  }
+
+  if (mode === "locked") {
+    return (
+      <div className="rounded-full border border-red-400/25 bg-red-400/10 px-4 py-2 text-sm font-black text-red-200">
+        ● Locked
+      </div>
+    );
   }
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-white">
-      <section className="mx-auto min-h-screen w-full max-w-4xl px-5 py-6 md:px-8">
-        <AppNav />
+    <div className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-black text-zinc-400">
+      Checking...
+    </div>
+  );
+}
 
-        <nav className="mb-8">
-          <p className="text-xs uppercase tracking-[0.35em] text-emerald-400">
-            Operation: Recode
-          </p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight md:text-6xl">
-            Account.
-            <br />
-            Sync your data.
-          </h1>
-        </nav>
+function StatusRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/5 bg-black/20 px-4 py-3">
+      <p className="text-sm font-bold text-zinc-500">{label}</p>
+      <p className="text-right text-sm font-black text-white">{value}</p>
+    </div>
+  );
+}
 
-        <section className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="text-sm text-zinc-400">Session</p>
-              <p className="mt-2 text-2xl font-black">
-                {userEmail ? userEmail : "Not signed in"}
-              </p>
-            </div>
-
-            <div
-              className={
-                userEmail
-                  ? "rounded-full bg-emerald-400 px-4 py-2 text-xs font-black text-zinc-950"
-                  : "rounded-full border border-zinc-700 px-4 py-2 text-xs font-bold text-zinc-400"
-              }
-            >
-              {userEmail ? "ONLINE" : "OFFLINE"}
-            </div>
-          </div>
-
-          <p className="mt-5 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-4 text-sm text-emerald-100">
-            {status}
-          </p>
-        </section>
-
-        <section className="mt-5 rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
-          <p className="text-sm text-zinc-400">Sign In</p>
-          <h2 className="mt-1 text-2xl font-bold">Access your cloud data</h2>
-
-          <div className="mt-5 grid gap-3">
-            <label className="block">
-              <span className="text-xs text-zinc-500">Email</span>
-              <input
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="your@email.com"
-                className="mt-1 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
-              />
-            </label>
-
-            <label className="block">
-              <span className="text-xs text-zinc-500">Password</span>
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="password"
-                className="mt-1 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
-              />
-            </label>
-
-            <div className="grid gap-3 md:grid-cols-3">
-              <button
-                onClick={signIn}
-                disabled={loading}
-                className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-black text-zinc-950 hover:bg-emerald-300 disabled:opacity-50"
-              >
-                Sign In
-              </button>
-
-              <button
-                onClick={signUp}
-                disabled={loading}
-                className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
-              >
-                Create Account
-              </button>
-
-              <button
-                onClick={signOut}
-                disabled={loading}
-                className="rounded-2xl border border-red-900/70 bg-red-950/40 px-4 py-3 text-sm font-bold text-red-300 hover:bg-red-950 disabled:opacity-50"
-              >
-                Sign Out
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <section className="mt-5 rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
-          <p className="text-sm text-zinc-400">Password Reset</p>
-          <h2 className="mt-1 text-2xl font-bold">Reset by email</h2>
-
-          <p className="mt-3 text-sm leading-6 text-zinc-400">
-            Password changes require a reset link sent to your email.
-          </p>
-
-          <button
-            onClick={sendResetPasswordEmail}
-            disabled={loading}
-            className="mt-5 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
-          >
-            Send Reset Link
-          </button>
-        </section>
-
-        {canSetNewPassword && (
-          <section className="mt-5 rounded-3xl border border-emerald-400/40 bg-emerald-400/10 p-5 md:p-6">
-            <p className="text-sm text-emerald-300">Verified Reset</p>
-
-            <h2 className="mt-1 text-2xl font-bold">Set new password</h2>
-
-            <p className="mt-3 text-sm leading-6 text-zinc-300">
-              This section appears only after opening a valid password reset link.
-            </p>
-
-            <label className="mt-5 block">
-              <span className="text-xs text-zinc-500">New Password</span>
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
-                placeholder="new password"
-                className="mt-1 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
-              />
-            </label>
-
-            <button
-              onClick={saveNewPasswordFromEmailLink}
-              disabled={loading}
-              className="mt-4 w-full rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-black text-zinc-950 hover:bg-emerald-300 disabled:opacity-50"
-            >
-              Save New Password
-            </button>
-          </section>
-        )}
-      </section>
-    </main>
+function MiniRule({
+  title,
+  text,
+  active,
+}: {
+  title: string;
+  text: string;
+  active: boolean;
+}) {
+  return (
+    <div
+      className={
+        active
+          ? "rounded-3xl border border-emerald-400/25 bg-emerald-400/10 p-4"
+          : "rounded-3xl border border-white/5 bg-black/20 p-4"
+      }
+    >
+      <p className="font-black text-white">{title}</p>
+      <p className="mt-1 text-sm text-zinc-500">{text}</p>
+    </div>
   );
 }

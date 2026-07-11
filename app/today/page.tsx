@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import AppNav from "../AppNav";
 import { createClient } from "../../lib/supabase/client";
+import { canSaveWithoutLogin, getSaveLockMessage } from "../../lib/recode/auth-mode";
 
 type Goals = {
   targetWeight: number;
@@ -610,6 +611,12 @@ export default function TodayPage() {
   });
 
   async function saveDailyForm(formToSave: DailyLog, label = "Daily check-in") {
+    if (!userId && !canSaveWithoutLogin()) {
+      alert(getSaveLockMessage());
+      setSyncStatus("Saving locked. Login or enable Guest Mode in Account.");
+      return;
+    }
+
     const savedDaily: DailyLog = {
       date: today,
       weight: Number(formToSave.weight),
@@ -674,6 +681,12 @@ export default function TodayPage() {
     caloriesValue: number;
     mealType: MealType;
   }) {
+    if (!userId && !canSaveWithoutLogin()) {
+      alert(getSaveLockMessage());
+      setSyncStatus("Saving locked. Login or enable Guest Mode in Account.");
+      return;
+    }
+
     const newLog: FoodLog = {
       id: crypto.randomUUID(),
       date: today,
@@ -723,6 +736,12 @@ export default function TodayPage() {
     minutes: number;
     label: string;
   }) {
+    if (!userId && !canSaveWithoutLogin()) {
+      alert(getSaveLockMessage());
+      setSyncStatus("Saving locked. Login or enable Guest Mode in Account.");
+      return;
+    }
+
     const estimatedCalories = estimateCalories({
       type,
       weightKg: currentWeight,
@@ -1318,3 +1337,5 @@ function EmptyState({ text }: { text: string }) {
     </div>
   );
 }
+
+

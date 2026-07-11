@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { createClient } from "../lib/supabase/client";
-import { getAuthMode } from "../lib/recode/auth-mode";
+import { AUTH_MODE_EVENT, getAuthMode } from "../lib/recode/auth-mode";
 
 type SaveMode = "loading" | "sync" | "guest" | "locked";
 
@@ -77,17 +77,15 @@ export default function AppNav() {
       setSaveMode("locked");
     });
 
-    function handleStorageChange() {
-      checkSaveMode();
-    }
-
-    window.addEventListener("storage", handleStorageChange);
-    window.addEventListener("focus", handleStorageChange);
+    window.addEventListener("storage", checkSaveMode);
+    window.addEventListener("focus", checkSaveMode);
+    window.addEventListener(AUTH_MODE_EVENT, checkSaveMode);
 
     return () => {
       subscription.unsubscribe();
-      window.removeEventListener("storage", handleStorageChange);
-      window.removeEventListener("focus", handleStorageChange);
+      window.removeEventListener("storage", checkSaveMode);
+      window.removeEventListener("focus", checkSaveMode);
+      window.removeEventListener(AUTH_MODE_EVENT, checkSaveMode);
     };
   }, []);
 
@@ -162,6 +160,12 @@ export default function AppNav() {
         </div>
       </header>
 
+      <div className="fixed bottom-[76px] left-3 right-3 z-[9998] md:hidden">
+        <div className="mx-auto max-w-md">
+          <SaveModeMobileChip mode={saveMode} />
+        </div>
+      </div>
+
       <nav className="fixed bottom-0 left-0 right-0 z-[9999] border-t border-white/5 bg-black/70 px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-2 backdrop-blur-2xl md:hidden">
         <div className="mx-auto grid max-w-md grid-cols-5 gap-2">
           {mobileLinks.map((link) => {
@@ -187,7 +191,7 @@ export default function AppNav() {
         </div>
       </nav>
 
-      <div className="h-24 md:hidden" />
+      <div className="h-32 md:hidden" />
     </>
   );
 }
@@ -232,6 +236,50 @@ function SaveModeChip({ mode }: { mode: SaveMode }) {
       className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-black text-zinc-400"
     >
       Checking
+    </Link>
+  );
+}
+
+function SaveModeMobileChip({ mode }: { mode: SaveMode }) {
+  if (mode === "sync") {
+    return (
+      <Link
+        href="/login"
+        className="block rounded-2xl border border-emerald-400/25 bg-emerald-400/10 px-4 py-3 text-center text-xs font-black text-emerald-200 backdrop-blur-2xl"
+      >
+        ● Sync On — cloud saving active
+      </Link>
+    );
+  }
+
+  if (mode === "guest") {
+    return (
+      <Link
+        href="/login"
+        className="block rounded-2xl border border-amber-400/25 bg-amber-400/10 px-4 py-3 text-center text-xs font-black text-amber-200 backdrop-blur-2xl"
+      >
+        ● Guest Mode — local only
+      </Link>
+    );
+  }
+
+  if (mode === "locked") {
+    return (
+      <Link
+        href="/login"
+        className="block rounded-2xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-center text-xs font-black text-red-200 backdrop-blur-2xl"
+      >
+        ● Locked — login or use Guest
+      </Link>
+    );
+  }
+
+  return (
+    <Link
+      href="/login"
+      className="block rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-center text-xs font-black text-zinc-400 backdrop-blur-2xl"
+    >
+      Checking save mode...
     </Link>
   );
 }

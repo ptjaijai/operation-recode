@@ -1,7 +1,8 @@
-﻿const CACHE_NAME = "operation-recode-v1";
+﻿const CACHE_NAME = "operation-recode-v2";
 
 const CORE_ASSETS = [
   "/",
+  "/offline",
   "/manifest.webmanifest",
   "/icon.svg"
 ];
@@ -28,20 +29,70 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+function shouldIgnoreRequest(request) {
+  const url = new URL(request.url);
+
+  if (request.method !== "GET") return true;
+
+  if (url.origin !== self.location.origin) return true;
+
+  if (url.pathname.startsWith("/api")) return true;
+
+  if (url.pathname.startsWith("/_next/webpack-hmr")) return true;
+
+  if (url.pathname.includes("hot-update")) return true;
+
+  return false;
+}
+
 self.addEventListener("fetch", (event) => {
-  if (event.request.method !== "GET") return;
+  const request = event.request;
 
-  event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        const responseClone = response.clone();
+  if (shouldIgnoreRequest(request)) return;
 
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseClone);
+  const url = new URL(request.url);
+
+  if (request.mode === "navigate") {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          const clone = response.clone();
+
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(request, clone);
+          });
+
+          return response;
+        })
+        .catch(() => caches.match(request).then((cached) => cached || caches.match("/offline")))
+    );
+
+    return;
+  }
+
+  if (
+    url.pathname.startsWith("/_next/static") ||
+    url.pathname === "/manifest.webmanifest" ||
+    url.pathname === "/icon.svg"
+  ) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        if (cached) return cached;
+
+        return fetch(request).then((response) => {
+          const clone = response.clone();
+
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(request, clone);
+          });
+
+          return response;
         });
-
-        return response;
       })
-      .catch(() => caches.match(event.request))
-  );
+    );
+
+    return;
+  }
+
+  event.respondWith(fetch(request));
 });

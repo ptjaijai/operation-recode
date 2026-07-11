@@ -2,35 +2,38 @@
 
 import { useEffect, useMemo, useState } from "react";
 import AppNav from "../AppNav";
+import { createClient } from "../../lib/supabase/client";
+
+type SnackLevel = "none" | "low" | "medium" | "high";
+type MoodLevel = "great" | "good" | "neutral" | "tired" | "bad";
 
 type Goals = {
   targetWeight: number;
   proteinGoal: number;
+  calorieGoal: number;
   waterGoal: number;
   sleepGoal: number;
   workoutGoal: number;
 };
 
 type DailyLog = {
-  id: string;
   date: string;
   weight: number;
   sleep: number;
   water: number;
-  snackLevel: "none" | "low" | "medium" | "high";
-  mood: "great" | "good" | "neutral" | "tired" | "bad";
+  snackLevel: SnackLevel;
+  mood: MoodLevel;
   notes: string;
 };
 
 type FoodLog = {
   id: string;
   date: string;
-  mealType: string;
   foodName: string;
   protein: number;
+  calories: number;
   sweetDrink: boolean;
   junkFood: boolean;
-  notes: string;
 };
 
 type WorkoutLog = {
@@ -38,11 +41,7 @@ type WorkoutLog = {
   date: string;
   type: string;
   durationMinutes: number;
-  gamesPlayed?: number;
-  steps?: number;
-  distanceKm?: number;
-  swimmingMeters?: number;
-  notes: string;
+  estimatedCalories: number;
 };
 
 const storageKeys = {
@@ -55,6 +54,7 @@ const storageKeys = {
 const defaultGoals: Goals = {
   targetWeight: 60,
   proteinGoal: 120,
+  calorieGoal: 1800,
   waterGoal: 2,
   sleepGoal: 7,
   workoutGoal: 30,
@@ -70,6 +70,17 @@ function getLocalDateString(date = new Date()) {
 
 const today = getLocalDateString();
 
+function toNumber(value: unknown, fallback: number) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  return fallback;
+}
+
 function safeParseArray<T>(value: string | null): T[] {
   if (!value) return [];
 
@@ -81,7 +92,29 @@ function safeParseArray<T>(value: string | null): T[] {
   }
 }
 
-function loadGoals(): Goals {
+function normalizeSnackLevel(value: unknown): SnackLevel {
+  if (value === "none" || value === "low" || value === "medium" || value === "high") {
+    return value;
+  }
+
+  return "none";
+}
+
+function normalizeMood(value: unknown): MoodLevel {
+  if (
+    value === "great" ||
+    value === "good" ||
+    value === "neutral" ||
+    value === "tired" ||
+    value === "bad"
+  ) {
+    return value;
+  }
+
+  return "neutral";
+}
+
+function loadLocalGoals(): Goals {
   const saved = localStorage.getItem(storageKeys.goals);
 
   if (!saved) return defaultGoals;
@@ -90,30 +123,130 @@ function loadGoals(): Goals {
     const parsed = JSON.parse(saved) as Partial<Goals>;
 
     return {
-      targetWeight:
-        typeof parsed.targetWeight === "number"
-          ? parsed.targetWeight
-          : defaultGoals.targetWeight,
-      proteinGoal:
-        typeof parsed.proteinGoal === "number"
-          ? parsed.proteinGoal
-          : defaultGoals.proteinGoal,
-      waterGoal:
-        typeof parsed.waterGoal === "number"
-          ? parsed.waterGoal
-          : defaultGoals.waterGoal,
-      sleepGoal:
-        typeof parsed.sleepGoal === "number"
-          ? parsed.sleepGoal
-          : defaultGoals.sleepGoal,
-      workoutGoal:
-        typeof parsed.workoutGoal === "number"
-          ? parsed.workoutGoal
-          : defaultGoals.workoutGoal,
+      targetWeight: toNumber(parsed.targetWeight, defaultGoals.targetWeight),
+      proteinGoal: toNumber(parsed.proteinGoal, defaultGoals.proteinGoal),
+      calorieGoal: toNumber(parsed.calorieGoal, defaultGoals.calorieGoal),
+      waterGoal: toNumber(parsed.waterGoal, defaultGoals.waterGoal),
+      sleepGoal: toNumber(parsed.sleepGoal, defaultGoals.sleepGoal),
+      workoutGoal: toNumber(parsed.workoutGoal, defaultGoals.workoutGoal),
     };
   } catch {
     return defaultGoals;
   }
+}
+
+function goalsFromDatabase(row: Record<string, unknown>): Goals {
+  return {
+    targetWeight: toNumber(row.target_weight, defaultGoals.targetWeight),
+    proteinGoal: toNumber(row.protein_goal, defaultGoals.proteinGoal),
+    calorieGoal: toNumber(row.calorie_goal, defaultGoals.calorieGoal),
+    waterGoal: toNumber(row.water_goal, defaultGoals.waterGoal),
+    sleepGoal: toNumber(row.sleep_goal, defaultGoals.sleepGoal),
+    workoutGoal: toNumber(row.workout_goal, defaultGoals.workoutGoal),
+  };
+}
+
+function normalizeDailyLog(raw: Record<string, unknown>): DailyLog {
+  return {
+    date: typeof raw.date === "string" ? raw.date : today,
+    weight: toNumber(raw.weight ?? raw.weightKg, 0),
+    sleep: toNumber(raw.sleep ?? raw.sleepHours, 0),
+    water: toNumber(raw.water ?? raw.waterLiters, 0),
+    snackLevel: normalizeSnackLevel(raw.snackLevel),
+    mood: normalizeMood(raw.mood),
+    notes: typeof raw.notes === "string" ? raw.notes : "",
+  };
+}
+
+function databaseToDailyLog(row: Record<string, unknown>): DailyLog {
+  return {
+    date: typeof row.date === "string" ? row.date : today,
+    weight: toNumber(row.weight, 0),
+    sleep: toNumber(row.sleep, 0),
+    water: toNumber(row.water, 0),
+    snackLevel: normalizeSnackLevel(row.snack_level),
+    mood: normalizeMood(row.mood),
+    notes: typeof row.notes === "string" ? row.notes : "",
+  };
+}
+
+function normalizeFoodLog(raw: Record<string, unknown>): FoodLog {
+  return {
+    id: typeof raw.id === "string" ? raw.id : crypto.randomUUID(),
+    date: typeof raw.date === "string" ? raw.date : today,
+    foodName:
+      typeof raw.foodName === "string"
+        ? raw.foodName
+        : typeof raw.food === "string"
+        ? raw.food
+        : typeof raw.name === "string"
+        ? raw.name
+        : "",
+    protein: toNumber(raw.protein ?? raw.proteinGrams, 0),
+    calories: toNumber(raw.calories ?? raw.kcal, 0),
+    sweetDrink:
+      typeof raw.sweetDrink === "boolean"
+        ? raw.sweetDrink
+        : typeof raw.hasSweetDrink === "boolean"
+        ? raw.hasSweetDrink
+        : false,
+    junkFood:
+      typeof raw.junkFood === "boolean"
+        ? raw.junkFood
+        : typeof raw.hasJunkFood === "boolean"
+        ? raw.hasJunkFood
+        : false,
+  };
+}
+
+function databaseToFoodLog(row: Record<string, unknown>): FoodLog {
+  return {
+    id: typeof row.id === "string" ? row.id : crypto.randomUUID(),
+    date: typeof row.date === "string" ? row.date : today,
+    foodName: typeof row.food_name === "string" ? row.food_name : "",
+    protein: toNumber(row.protein, 0),
+    calories: toNumber(row.calories, 0),
+    sweetDrink: row.sweet_drink === true,
+    junkFood: row.junk_food === true,
+  };
+}
+
+function normalizeWorkoutLog(raw: Record<string, unknown>): WorkoutLog {
+  return {
+    id: typeof raw.id === "string" ? raw.id : crypto.randomUUID(),
+    date: typeof raw.date === "string" ? raw.date : today,
+    type: typeof raw.type === "string" ? raw.type : "other",
+    durationMinutes: toNumber(raw.durationMinutes ?? raw.duration_minutes, 0),
+    estimatedCalories: toNumber(raw.estimatedCalories ?? raw.estimated_calories, 0),
+  };
+}
+
+function databaseToWorkoutLog(row: Record<string, unknown>): WorkoutLog {
+  return {
+    id: typeof row.id === "string" ? row.id : crypto.randomUUID(),
+    date: typeof row.date === "string" ? row.date : today,
+    type: typeof row.type === "string" ? row.type : "other",
+    durationMinutes: toNumber(row.duration_minutes, 0),
+    estimatedCalories: toNumber(row.estimated_calories, 0),
+  };
+}
+
+function mergeByDate(localLogs: DailyLog[], cloudLogs: DailyLog[]) {
+  const map = new Map<string, DailyLog>();
+
+  cloudLogs.forEach((log) => map.set(log.date, log));
+  localLogs.forEach((log) => map.set(log.date, log));
+
+  return Array.from(map.values());
+}
+
+function mergeById<T extends { id: string }>(localLogs: T[], cloudLogs: T[]) {
+  const map = new Map<string, T>();
+
+  cloudLogs.forEach((log) => map.set(log.id, log));
+  localLogs.forEach((log) => map.set(log.id, log));
+
+  return Array.from(map.values());
 }
 
 function formatDateForMenu(dateString: string) {
@@ -138,364 +271,211 @@ function shiftDate(dateString: string, days: number) {
   return getLocalDateString(date);
 }
 
-function normalizeDailyLog(raw: Record<string, unknown>): DailyLog {
-  return {
-    id: typeof raw.id === "string" ? raw.id : crypto.randomUUID(),
-    date: typeof raw.date === "string" ? raw.date : today,
-    weight:
-      typeof raw.weight === "number"
-        ? raw.weight
-        : typeof raw.weightKg === "number"
-        ? raw.weightKg
-        : 0,
-    sleep:
-      typeof raw.sleep === "number"
-        ? raw.sleep
-        : typeof raw.sleepHours === "number"
-        ? raw.sleepHours
-        : 0,
-    water:
-      typeof raw.water === "number"
-        ? raw.water
-        : typeof raw.waterLiters === "number"
-        ? raw.waterLiters
-        : 0,
-    snackLevel:
-      raw.snackLevel === "none" ||
-      raw.snackLevel === "low" ||
-      raw.snackLevel === "medium" ||
-      raw.snackLevel === "high"
-        ? raw.snackLevel
-        : "none",
-    mood:
-      raw.mood === "great" ||
-      raw.mood === "good" ||
-      raw.mood === "neutral" ||
-      raw.mood === "tired" ||
-      raw.mood === "bad"
-        ? raw.mood
-        : "neutral",
-    notes: typeof raw.notes === "string" ? raw.notes : "",
-  };
-}
-
-function normalizeFoodLog(raw: Record<string, unknown>): FoodLog {
-  return {
-    id: typeof raw.id === "string" ? raw.id : crypto.randomUUID(),
-    date: typeof raw.date === "string" ? raw.date : today,
-    mealType: typeof raw.mealType === "string" ? raw.mealType : "other",
-    foodName:
-      typeof raw.foodName === "string"
-        ? raw.foodName
-        : typeof raw.name === "string"
-        ? raw.name
-        : typeof raw.food === "string"
-        ? raw.food
-        : "",
-    protein:
-      typeof raw.protein === "number"
-        ? raw.protein
-        : typeof raw.proteinGrams === "number"
-        ? raw.proteinGrams
-        : typeof raw.proteinEstimate === "number"
-        ? raw.proteinEstimate
-        : 0,
-    sweetDrink:
-      typeof raw.sweetDrink === "boolean"
-        ? raw.sweetDrink
-        : typeof raw.hasSweetDrink === "boolean"
-        ? raw.hasSweetDrink
-        : false,
-    junkFood:
-      typeof raw.junkFood === "boolean"
-        ? raw.junkFood
-        : typeof raw.hasJunkFood === "boolean"
-        ? raw.hasJunkFood
-        : false,
-    notes: typeof raw.notes === "string" ? raw.notes : "",
-  };
-}
-
-function normalizeWorkoutLog(raw: Record<string, unknown>): WorkoutLog {
-  return {
-    id: typeof raw.id === "string" ? raw.id : crypto.randomUUID(),
-    date: typeof raw.date === "string" ? raw.date : today,
-    type: typeof raw.type === "string" ? raw.type : "other",
-    durationMinutes:
-      typeof raw.durationMinutes === "number" ? raw.durationMinutes : 0,
-    gamesPlayed: typeof raw.gamesPlayed === "number" ? raw.gamesPlayed : 0,
-    steps: typeof raw.steps === "number" ? raw.steps : 0,
-    distanceKm: typeof raw.distanceKm === "number" ? raw.distanceKm : 0,
-    swimmingMeters:
-      typeof raw.swimmingMeters === "number" ? raw.swimmingMeters : 0,
-    notes: typeof raw.notes === "string" ? raw.notes : "",
-  };
-}
-
-function getSleepScore(sleep: number, sleepGoal: number) {
-  if (sleep >= sleepGoal) return 100;
-  if (sleep >= sleepGoal - 1) return 75;
-  if (sleep >= sleepGoal - 2) return 45;
-  if (sleep > 0) return 25;
-  return 0;
-}
-
-function getWaterScore(water: number, waterGoal: number) {
-  if (water >= waterGoal) return 100;
-  if (water >= waterGoal * 0.8) return 80;
-  if (water >= waterGoal * 0.6) return 60;
-  if (water > 0) return 30;
-  return 0;
-}
-
-function getSnackScore(level: DailyLog["snackLevel"]) {
-  if (level === "none") return 100;
-  if (level === "low") return 80;
-  if (level === "medium") return 50;
-  return 20;
-}
-
-function getMoodScore(mood: DailyLog["mood"]) {
-  if (mood === "great") return 100;
-  if (mood === "good") return 80;
-  if (mood === "neutral") return 60;
-  if (mood === "tired") return 40;
-  return 20;
-}
-
-function getBaselineScore(log: DailyLog | undefined, goals: Goals) {
-  if (!log) return 0;
-
-  return Math.round(
-    getSleepScore(log.sleep, goals.sleepGoal) * 0.35 +
-      getWaterScore(log.water, goals.waterGoal) * 0.3 +
-      getSnackScore(log.snackLevel) * 0.25 +
-      getMoodScore(log.mood) * 0.1
-  );
-}
-
-function getProteinScore(protein: number, proteinGoal: number) {
-  if (protein >= proteinGoal) return 100;
-  if (protein >= proteinGoal * 0.85) return 85;
-  if (protein >= proteinGoal * 0.65) return 65;
-  if (protein >= proteinGoal * 0.5) return 45;
+function getProteinScore(protein: number, goal: number) {
+  if (protein >= goal) return 100;
+  if (protein >= goal * 0.85) return 85;
+  if (protein >= goal * 0.65) return 65;
+  if (protein >= goal * 0.5) return 45;
   if (protein > 0) return 25;
   return 0;
 }
 
-function getWorkoutScore(minutes: number, workoutGoal: number) {
-  if (minutes >= workoutGoal) return 100;
-  if (minutes >= workoutGoal * 0.75) return 85;
-  if (minutes >= workoutGoal * 0.5) return 65;
-  if (minutes > 0) return 35;
+function getCalorieScore(calories: number, calorieGoal: number) {
+  if (calories === 0) return 0;
+
+  const diff = Math.abs(calories - calorieGoal);
+  const diffPercent = diff / calorieGoal;
+
+  if (calories <= calorieGoal && diffPercent <= 0.1) return 100;
+  if (calories <= calorieGoal && diffPercent <= 0.25) return 85;
+  if (calories <= calorieGoal) return 70;
+  if (diffPercent <= 0.1) return 70;
+  if (diffPercent <= 0.25) return 45;
+  return 20;
+}
+
+function getWorkoutScore(minutes: number, goal: number) {
+  if (minutes >= goal) return 100;
+  if (minutes >= goal * 0.75) return 75;
+  if (minutes >= goal * 0.5) return 50;
+  if (minutes > 0) return 30;
   return 0;
 }
 
-function getRiskLevel(score: number) {
-  if (score >= 80) return "Low Risk";
-  if (score >= 60) return "Medium Risk";
-  if (score >= 40) return "High Risk";
-  return "Very High Risk";
+function getWaterScore(water: number, goal: number) {
+  if (water >= goal) return 100;
+  if (water >= goal * 0.8) return 80;
+  if (water >= goal * 0.6) return 60;
+  if (water > 0) return 30;
+  return 0;
+}
+
+function getSleepScore(sleep: number, goal: number) {
+  if (sleep >= goal) return 100;
+  if (sleep >= goal - 1) return 75;
+  if (sleep >= goal - 2) return 45;
+  if (sleep > 0) return 25;
+  return 0;
+}
+
+function getFoodQualityScore(sweetDrinkCount: number, junkFoodCount: number) {
+  const penalty = sweetDrinkCount * 20 + junkFoodCount * 25;
+  return Math.max(100 - penalty, 0);
 }
 
 function getMainProblem({
-  dailyLog,
-  totalProtein,
+  hasDailyLog,
+  protein,
+  proteinGoal,
+  calories,
+  calorieGoal,
+  netCalories,
   workoutMinutes,
+  workoutGoal,
+  water,
+  waterGoal,
+  sleep,
+  sleepGoal,
   sweetDrinkCount,
-  junkCount,
-  goals,
+  junkFoodCount,
 }: {
-  dailyLog?: DailyLog;
-  totalProtein: number;
+  hasDailyLog: boolean;
+  protein: number;
+  proteinGoal: number;
+  calories: number;
+  calorieGoal: number;
+  netCalories: number;
   workoutMinutes: number;
+  workoutGoal: number;
+  water: number;
+  waterGoal: number;
+  sleep: number;
+  sleepGoal: number;
   sweetDrinkCount: number;
-  junkCount: number;
-  goals: Goals;
+  junkFoodCount: number;
 }) {
-  if (!dailyLog) {
-    return {
-      title: "No baseline yet",
-      detail:
-        "ยังไม่มี Daily Check-in วันนี้ เลยยังวิเคราะห์จริงไม่ได้ ต้องมีน้ำหนัก นอน น้ำ mood และ snack level ก่อน",
-    };
-  }
-
-  if (dailyLog.sleep > 0 && dailyLog.sleep < goals.sleepGoal - 1) {
-    return {
-      title: "Sleep debt is driving the day",
-      detail:
-        "วันนี้ความเสี่ยงหลักคือการนอนน้อย เพราะมันทำให้หิวบ่อย อยากหวานง่าย และทำให้แรงซ้อมตก",
-    };
-  }
-
-  if (dailyLog.water < goals.waterGoal) {
-    return {
-      title: "Water is too low",
-      detail:
-        "น้ำยังต่ำกว่าเป้า ก่อนจะตัดสินว่าหิวจริงหรืออยากกินเล่น ควรดันน้ำให้ถึงเป้าก่อน",
-    };
-  }
-
-  if (totalProtein < goals.proteinGoal * 0.65) {
-    return {
-      title: "Protein is too low",
-      detail:
-        "โปรตีนยังต่ำ ถ้าลดน้ำหนักโดยโปรตีนไม่ถึง เสี่ยงเสียกล้ามและหิวง่ายกว่าเดิม",
-    };
-  }
-
-  if (workoutMinutes < goals.workoutGoal) {
-    return {
-      title: "Movement is below goal",
-      detail: `วันนี้ movement ยังไม่ถึงเป้า ${goals.workoutGoal} นาที ไม่ต้องซ้อมหนักก็ได้ แต่ควรเติมให้ครบ`,
-    };
-  }
-
-  if (sweetDrinkCount > 0 || junkCount > 0) {
-    return {
-      title: "Food quality risk",
-      detail:
-        "วันนี้มีน้ำหวานหรือ junk แล้ว จุดสำคัญคืออย่าปล่อยให้มื้อต่อไปหลุดต่อเป็น chain",
-    };
-  }
-
-  return {
-    title: "System is stable",
-    detail:
-      "วันนี้ภาพรวมดี ไม่มีปัญหาหลักชัด ๆ ให้ทำต่อแบบนิ่ง ๆ และอย่าเติม snack แบบไม่จำเป็น",
-  };
+  if (!hasDailyLog) return "ยังไม่ได้ลง Daily Check-in เลย ข้อมูลวันนี้ยังไม่ครบ";
+  if (sleep > 0 && sleep < sleepGoal - 1) return "นอนน้อย วันนี้เสี่ยงหิวและหลุดง่าย";
+  if (water < waterGoal) return "น้ำยังไม่ถึงเป้า อาจทำให้คิดว่าหิวทั้งที่จริง ๆ ขาดน้ำ";
+  if (protein < proteinGoal * 0.65) return "โปรตีนยังต่ำเกินไป ทำให้อิ่มยากและคุมแคลยาก";
+  if (calories > calorieGoal) return "แคลอรีอาหารเกินเป้าวันนี้แล้ว";
+  if (netCalories > calorieGoal) return "Net calories ยังเกิน หลังหักออกกำลังกาย";
+  if (workoutMinutes < workoutGoal) return "Movement ยังไม่ถึงเป้า";
+  if (sweetDrinkCount > 0) return "มีน้ำหวานวันนี้ จุดนี้ลดง่ายและเห็นผลเร็ว";
+  if (junkFoodCount > 0) return "มี junk food วันนี้ แต่ยังแก้เกมได้";
+  return "วันนี้ระบบดีแล้ว เหลือแค่รักษาไม่ให้หลุดช่วงท้ายวัน";
 }
 
 function getStrategy({
-  dailyLog,
-  totalProtein,
+  protein,
+  proteinGoal,
+  calories,
+  calorieGoal,
+  netCalories,
   workoutMinutes,
-  sweetDrinkCount,
-  junkCount,
-  goals,
+  workoutGoal,
+  water,
+  waterGoal,
+  sleep,
+  sleepGoal,
 }: {
-  dailyLog?: DailyLog;
-  totalProtein: number;
+  protein: number;
+  proteinGoal: number;
+  calories: number;
+  calorieGoal: number;
+  netCalories: number;
   workoutMinutes: number;
-  sweetDrinkCount: number;
-  junkCount: number;
-  goals: Goals;
+  workoutGoal: number;
+  water: number;
+  waterGoal: number;
+  sleep: number;
+  sleepGoal: number;
 }) {
-  const proteinLeft = Math.max(goals.proteinGoal - totalProtein, 0);
-  const workoutLeft = Math.max(goals.workoutGoal - workoutMinutes, 0);
-
-  if (!dailyLog) {
-    return "เริ่มจากไปหน้า Dashboard แล้วบันทึก Daily Check-in ก่อน จากนั้นกลับมาดู Coach ใหม่";
+  if (sleep > 0 && sleep < sleepGoal - 1) {
+    return "วันนี้ไม่ต้องเล่นหนักเพิ่ม ให้เน้นกินสะอาด ดื่มน้ำ และนอนคืนระบบ";
   }
 
-  if (dailyLog.sleep < goals.sleepGoal - 1) {
-    return "วันนี้ใช้ strategy แบบ recovery cut: โปรตีนให้ถึง น้ำให้ถึง workout เบา ๆ และห้ามอดจนหิวหนักตอนดึก";
+  if (water < waterGoal) {
+    return `ดื่มน้ำเพิ่มอีกประมาณ ${Math.max(waterGoal - water, 0).toFixed(
+      1
+    )}L ก่อนตัดสินใจกิน snack`;
   }
 
-  if (dailyLog.water < goals.waterGoal) {
-    return `ดื่มน้ำเพิ่มให้ถึง ${goals.waterGoal}L ก่อน แล้วค่อยประเมินความหิวอีกที`;
+  if (protein < proteinGoal) {
+    return `เพิ่มโปรตีนอีกประมาณ ${Math.max(
+      proteinGoal - protein,
+      0
+    )}g โดยเลือกของง่าย เช่น เวย์ ไก่ ไข่ ทูน่า`;
   }
 
-  if (proteinLeft > 0) {
-    return `เติมโปรตีนอีกประมาณ ${Math.round(
-      proteinLeft
-    )}g ด้วยของง่าย เช่น whey, ไก่, ไข่, ทูน่า, หมูไม่ติดมัน`;
+  if (calories > calorieGoal || netCalories > calorieGoal) {
+    return "มื้อถัดไปให้เป็นโปรตีนลีน + ไม่เติมน้ำหวาน/ของทอด ไม่ต้องอดอาหาร";
   }
 
-  if (workoutMinutes < goals.workoutGoal) {
-    return `เติม movement อีกประมาณ ${workoutLeft} นาที จะเดินเร็ว ตีแบด หรือ home workout ก็ได้`;
+  if (workoutMinutes < workoutGoal) {
+    return `เพิ่ม movement อีก ${Math.max(
+      workoutGoal - workoutMinutes,
+      0
+    )} นาที เช่น เดินหรือยืดเบา ๆ`;
   }
 
-  if (sweetDrinkCount > 0 || junkCount > 0) {
-    return "มื้อต่อไปให้เป็น reset meal: โปรตีนสูง น้ำเปล่า/zero และไม่ต้องกินชดเชยแบบอดข้าว";
-  }
-
-  return "ทำแบบเดิมต่อ ไม่ต้องเพิ่มความโหด แค่ปิดวันให้สะอาดและนอนให้ถึงเป้า";
+  return "รักษา pattern นี้ไว้ พรุ่งนี้เน้นทำซ้ำ ไม่ต้องเพิ่มความโหด";
 }
 
 function getAvoidList({
-  dailyLog,
-  totalProtein,
-  workoutMinutes,
+  calories,
+  calorieGoal,
   sweetDrinkCount,
-  junkCount,
-  goals,
+  junkFoodCount,
+  sleep,
+  sleepGoal,
 }: {
-  dailyLog?: DailyLog;
-  totalProtein: number;
-  workoutMinutes: number;
+  calories: number;
+  calorieGoal: number;
   sweetDrinkCount: number;
-  junkCount: number;
-  goals: Goals;
+  junkFoodCount: number;
+  sleep: number;
+  sleepGoal: number;
 }) {
   const avoid = [];
 
-  if (!dailyLog) {
-    avoid.push("อย่าเดาสุ่มว่าพังหรือดี จนกว่าจะ log baseline");
-  }
+  if (calories >= calorieGoal * 0.85) avoid.push("อย่าเพิ่ม snack แบบไม่จำเป็น");
+  if (sweetDrinkCount > 0) avoid.push("เลี่ยงน้ำหวานแก้วที่สอง");
+  if (junkFoodCount > 0) avoid.push("เลี่ยงของทอด/ขนมเพิ่ม");
+  if (sleep > 0 && sleep < sleepGoal) avoid.push("อย่านอนดึกซ้ำ");
+  if (avoid.length === 0) avoid.push("อย่าประมาทช่วงเย็น เพราะเป็นช่วงหลุดง่าย");
 
-  if (dailyLog && dailyLog.sleep < goals.sleepGoal - 1) {
-    avoid.push("อย่าซ้อมหนักเพื่อชดเชยนอนน้อย");
-    avoid.push("อย่าปล่อยให้หิวจัดตอนดึก");
-  }
-
-  if (dailyLog && dailyLog.water < goals.waterGoal) {
-    avoid.push("อย่ากินขนมเพราะคิดว่าหิว ทั้งที่น้ำยังไม่ถึง");
-  }
-
-  if (totalProtein < goals.proteinGoal) {
-    avoid.push("อย่าใช้มื้อคาร์บล้วนเป็นมื้อหลัก");
-  }
-
-  if (workoutMinutes < goals.workoutGoal) {
-    avoid.push("อย่ารอให้มีแรงก่อนค่อยขยับ ทำแบบสั้น ๆ ก่อน");
-  }
-
-  if (sweetDrinkCount > 0) {
-    avoid.push("อย่าเติมน้ำหวานแก้วที่สอง");
-  }
-
-  if (junkCount > 0) {
-    avoid.push("อย่าคิดว่าเพราะหลุดแล้ววันนี้พังหมด");
-  }
-
-  if (avoid.length === 0) {
-    avoid.push("อย่าเพิ่ม snack แบบไม่ได้หิวจริง");
-    avoid.push("อย่านอนดึกเพราะวันนี้ทำดีแล้ว");
-  }
-
-  return avoid.slice(0, 4);
+  return avoid;
 }
 
 function getTomorrowAdjustment({
-  dailyLog,
-  totalProtein,
+  netCalories,
+  calorieGoal,
+  protein,
+  proteinGoal,
   workoutMinutes,
-  goals,
+  workoutGoal,
 }: {
-  dailyLog?: DailyLog;
-  totalProtein: number;
+  netCalories: number;
+  calorieGoal: number;
+  protein: number;
+  proteinGoal: number;
   workoutMinutes: number;
-  goals: Goals;
+  workoutGoal: number;
 }) {
-  if (!dailyLog) {
-    return "พรุ่งนี้ให้เริ่มวันด้วย Daily Check-in เพื่อให้ระบบมีข้อมูลตั้งแต่เช้า";
+  if (netCalories > calorieGoal) {
+    return "พรุ่งนี้เริ่มด้วยมื้อโปรตีนสูงก่อน อย่าแก้ด้วยการอดทั้งวัน";
   }
 
-  if (dailyLog.sleep < goals.sleepGoal - 1) {
-    return "พรุ่งนี้อย่าเพิ่ม workout หนัก ให้แก้ที่เวลานอนก่อน";
+  if (protein < proteinGoal * 0.75) {
+    return "พรุ่งนี้วางโปรตีนไว้ตั้งแต่มื้อแรก ไม่รอแก้ตอนกลางคืน";
   }
 
-  if (totalProtein < goals.proteinGoal * 0.65) {
-    return "พรุ่งนี้วางโปรตีนตั้งแต่มื้อแรก อย่ารอให้ถึงเย็นแล้วค่อยไล่โปรตีน";
+  if (workoutMinutes < workoutGoal) {
+    return "พรุ่งนี้ล็อกเวลาเดินหรือ workout สั้น ๆ ไว้ก่อนเลย";
   }
 
-  if (workoutMinutes < goals.workoutGoal) {
-    return `พรุ่งนี้ล็อก movement ${goals.workoutGoal} นาทีไว้ก่อน เช่น เดินหลังอาหาร หรือ home workout ก่อนอาบน้ำ`;
-  }
-
-  return "พรุ่งนี้ทำ pattern เดิมซ้ำ: protein first, water early, movement ไม่ต้องรอ motivation";
+  return "พรุ่งนี้ทำเหมือนเดิมได้ แต่เพิ่มความแม่นเรื่องแคลอรีให้มากขึ้น";
 }
 
 export default function CoachPage() {
@@ -504,31 +484,111 @@ export default function CoachPage() {
   const [foodLogs, setFoodLogs] = useState<FoodLog[]>([]);
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([]);
   const [selectedDate, setSelectedDate] = useState(today);
+  const [syncStatus, setSyncStatus] = useState("Loading coach data...");
 
   useEffect(() => {
-    const savedDaily = safeParseArray<Record<string, unknown>>(
-      localStorage.getItem(storageKeys.daily)
-    );
+    async function loadCoachData() {
+      const localGoals = loadLocalGoals();
 
-    const savedFood = safeParseArray<Record<string, unknown>>(
-      localStorage.getItem(storageKeys.food)
-    );
+      const localDailyLogs = safeParseArray<Record<string, unknown>>(
+        localStorage.getItem(storageKeys.daily)
+      ).map((item) => normalizeDailyLog(item));
 
-    const savedWorkout = safeParseArray<Record<string, unknown>>(
-      localStorage.getItem(storageKeys.workout)
-    );
+      const localFoodLogs = safeParseArray<Record<string, unknown>>(
+        localStorage.getItem(storageKeys.food)
+      ).map((item) => normalizeFoodLog(item));
 
-    setGoals(loadGoals());
-    setDailyLogs(savedDaily.map((item) => normalizeDailyLog(item)));
-    setFoodLogs(savedFood.map((item) => normalizeFoodLog(item)));
-    setWorkoutLogs(savedWorkout.map((item) => normalizeWorkoutLog(item)));
+      const localWorkoutLogs = safeParseArray<Record<string, unknown>>(
+        localStorage.getItem(storageKeys.workout)
+      ).map((item) => normalizeWorkoutLog(item));
+
+      setGoals(localGoals);
+      setDailyLogs(localDailyLogs);
+      setFoodLogs(localFoodLogs);
+      setWorkoutLogs(localWorkoutLogs);
+
+      try {
+        const supabase = createClient();
+        const { data: userData } = await supabase.auth.getUser();
+
+        if (!userData.user) {
+          setSyncStatus("Not logged in. Coach is using local data only.");
+          return;
+        }
+
+        setSyncStatus("Loading cloud coach data...");
+
+        const [goalsResult, dailyResult, foodResult, workoutResult] =
+          await Promise.all([
+            supabase
+              .from("goals")
+              .select("*")
+              .eq("user_id", userData.user.id)
+              .maybeSingle(),
+            supabase
+              .from("daily_logs")
+              .select("*")
+              .eq("user_id", userData.user.id),
+            supabase
+              .from("food_logs")
+              .select("*")
+              .eq("user_id", userData.user.id),
+            supabase
+              .from("workout_logs")
+              .select("*")
+              .eq("user_id", userData.user.id),
+          ]);
+
+        if (goalsResult.data) {
+          const cloudGoals = goalsFromDatabase(goalsResult.data);
+          setGoals(cloudGoals);
+          localStorage.setItem(storageKeys.goals, JSON.stringify(cloudGoals));
+        }
+
+        if (dailyResult.error || foodResult.error || workoutResult.error) {
+          setSyncStatus("Some cloud data could not be loaded. Using available data.");
+          return;
+        }
+
+        const cloudDaily = (dailyResult.data ?? []).map((item) =>
+          databaseToDailyLog(item as Record<string, unknown>)
+        );
+
+        const cloudFood = (foodResult.data ?? []).map((item) =>
+          databaseToFoodLog(item as Record<string, unknown>)
+        );
+
+        const cloudWorkout = (workoutResult.data ?? []).map((item) =>
+          databaseToWorkoutLog(item as Record<string, unknown>)
+        );
+
+        const mergedDaily = mergeByDate(localDailyLogs, cloudDaily);
+        const mergedFood = mergeById(localFoodLogs, cloudFood);
+        const mergedWorkout = mergeById(localWorkoutLogs, cloudWorkout);
+
+        setDailyLogs(mergedDaily);
+        setFoodLogs(mergedFood);
+        setWorkoutLogs(mergedWorkout);
+
+        localStorage.setItem(storageKeys.daily, JSON.stringify(mergedDaily));
+        localStorage.setItem(storageKeys.food, JSON.stringify(mergedFood));
+        localStorage.setItem(storageKeys.workout, JSON.stringify(mergedWorkout));
+
+        setSyncStatus("Coach data loaded from Supabase.");
+      } catch (error) {
+        setSyncStatus(
+          error instanceof Error ? error.message : "Could not connect to Supabase."
+        );
+      }
+    }
+
+    loadCoachData();
   }, []);
 
   const availableDates = useMemo(() => {
     const dates = new Set<string>();
 
     dates.add(today);
-
     dailyLogs.forEach((log) => dates.add(log.date));
     foodLogs.forEach((log) => dates.add(log.date));
     workoutLogs.forEach((log) => dates.add(log.date));
@@ -541,57 +601,88 @@ export default function CoachPage() {
   const selectedWorkoutLogs = workoutLogs.filter((log) => log.date === selectedDate);
 
   const totalProtein = selectedFoodLogs.reduce((sum, log) => sum + log.protein, 0);
-  const proteinLeft = Math.max(goals.proteinGoal - totalProtein, 0);
+  const totalCalories = selectedFoodLogs.reduce((sum, log) => sum + log.calories, 0);
   const sweetDrinkCount = selectedFoodLogs.filter((log) => log.sweetDrink).length;
-  const junkCount = selectedFoodLogs.filter((log) => log.junkFood).length;
+  const junkFoodCount = selectedFoodLogs.filter((log) => log.junkFood).length;
 
-  const workoutMinutes = selectedWorkoutLogs.reduce(
+  const totalWorkoutMinutes = selectedWorkoutLogs.reduce(
     (sum, log) => sum + log.durationMinutes,
     0
   );
 
-  const workoutLeft = Math.max(goals.workoutGoal - workoutMinutes, 0);
+  const totalBurn = selectedWorkoutLogs.reduce(
+    (sum, log) => sum + log.estimatedCalories,
+    0
+  );
 
-  const baselineScore = getBaselineScore(dailyLog, goals);
+  const netCalories = totalCalories - totalBurn;
+
+  const water = dailyLog?.water ?? 0;
+  const sleep = dailyLog?.sleep ?? 0;
+
   const proteinScore = getProteinScore(totalProtein, goals.proteinGoal);
-  const workoutScore = getWorkoutScore(workoutMinutes, goals.workoutGoal);
+  const calorieScore = getCalorieScore(netCalories, goals.calorieGoal);
+  const workoutScore = getWorkoutScore(totalWorkoutMinutes, goals.workoutGoal);
+  const waterScore = getWaterScore(water, goals.waterGoal);
+  const sleepScore = getSleepScore(sleep, goals.sleepGoal);
+  const foodQualityScore = getFoodQualityScore(sweetDrinkCount, junkFoodCount);
 
-  const overallScore = Math.round(
-    baselineScore * 0.4 + proteinScore * 0.35 + workoutScore * 0.25
+  const systemScore = Math.round(
+    proteinScore * 0.25 +
+      calorieScore * 0.25 +
+      workoutScore * 0.15 +
+      waterScore * 0.15 +
+      sleepScore * 0.15 +
+      foodQualityScore * 0.05
   );
 
   const mainProblem = getMainProblem({
-    dailyLog,
-    totalProtein,
-    workoutMinutes,
+    hasDailyLog: Boolean(dailyLog),
+    protein: totalProtein,
+    proteinGoal: goals.proteinGoal,
+    calories: totalCalories,
+    calorieGoal: goals.calorieGoal,
+    netCalories,
+    workoutMinutes: totalWorkoutMinutes,
+    workoutGoal: goals.workoutGoal,
+    water,
+    waterGoal: goals.waterGoal,
+    sleep,
+    sleepGoal: goals.sleepGoal,
     sweetDrinkCount,
-    junkCount,
-    goals,
+    junkFoodCount,
   });
 
   const strategy = getStrategy({
-    dailyLog,
-    totalProtein,
-    workoutMinutes,
-    sweetDrinkCount,
-    junkCount,
-    goals,
+    protein: totalProtein,
+    proteinGoal: goals.proteinGoal,
+    calories: totalCalories,
+    calorieGoal: goals.calorieGoal,
+    netCalories,
+    workoutMinutes: totalWorkoutMinutes,
+    workoutGoal: goals.workoutGoal,
+    water,
+    waterGoal: goals.waterGoal,
+    sleep,
+    sleepGoal: goals.sleepGoal,
   });
 
   const avoidList = getAvoidList({
-    dailyLog,
-    totalProtein,
-    workoutMinutes,
+    calories: totalCalories,
+    calorieGoal: goals.calorieGoal,
     sweetDrinkCount,
-    junkCount,
-    goals,
+    junkFoodCount,
+    sleep,
+    sleepGoal: goals.sleepGoal,
   });
 
   const tomorrowAdjustment = getTomorrowAdjustment({
-    dailyLog,
-    totalProtein,
-    workoutMinutes,
-    goals,
+    netCalories,
+    calorieGoal: goals.calorieGoal,
+    protein: totalProtein,
+    proteinGoal: goals.proteinGoal,
+    workoutMinutes: totalWorkoutMinutes,
+    workoutGoal: goals.workoutGoal,
   });
 
   return (
@@ -612,9 +703,13 @@ export default function CoachPage() {
           </div>
 
           <div className="rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-zinc-300">
-            Coach / v2.1
+            Coach / v3.0
           </div>
         </nav>
+
+        <section className="mb-5 rounded-3xl border border-emerald-400/30 bg-emerald-400/10 p-5 text-sm text-emerald-100">
+          {syncStatus}
+        </section>
 
         <section className="mb-5 rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -668,222 +763,166 @@ export default function CoachPage() {
           </div>
         </section>
 
-        <section className="grid gap-5 xl:grid-cols-[0.85fr_1.15fr]">
-          <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-6 md:p-8">
+        <section className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+          <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
             <p className="text-sm text-zinc-400">System Score</p>
-
-            <p className="mt-3 text-7xl font-black tracking-tight md:text-8xl">
-              {overallScore}
-              <span className="ml-2 text-3xl text-zinc-500">/100</span>
-            </p>
-
-            <p className="mt-4 text-sm font-bold text-emerald-300">
-              {getRiskLevel(overallScore)}
+            <p className="mt-3 text-7xl font-black">
+              {systemScore}
+              <span className="text-2xl text-zinc-500"> / 100</span>
             </p>
 
             <div className="mt-5 h-3 overflow-hidden rounded-full bg-zinc-800">
               <div
                 className="h-full rounded-full bg-emerald-400 transition-all"
-                style={{ width: `${overallScore}%` }}
+                style={{ width: `${systemScore}%` }}
               />
             </div>
 
-            <div className="mt-5 grid gap-3">
-              <ScoreRow label="Baseline" value={baselineScore} />
-              <ScoreRow label="Protein" value={proteinScore} />
-              <ScoreRow label="Workout" value={workoutScore} />
+            <div className="mt-5 rounded-3xl border border-red-400/20 bg-red-400/10 p-5">
+              <p className="text-sm text-red-300">Main Problem</p>
+              <p className="mt-2 text-2xl font-black">{mainProblem}</p>
             </div>
-          </div>
 
-          <div className="rounded-3xl border border-emerald-400/30 bg-emerald-400/10 p-5 md:p-6">
-            <p className="text-sm text-emerald-300">Main Problem</p>
-            <h2 className="mt-1 text-3xl font-black">{mainProblem.title}</h2>
+            <div className="mt-4 rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-5">
+              <p className="text-sm text-emerald-300">Recommended Strategy</p>
+              <p className="mt-2 text-lg font-bold leading-7">{strategy}</p>
+            </div>
 
-            <p className="mt-4 text-sm leading-6 text-zinc-200">
-              {mainProblem.detail}
-            </p>
+            <div className="mt-4 rounded-3xl border border-zinc-800 bg-zinc-950 p-5">
+              <p className="text-sm text-zinc-400">Avoid Now</p>
+              <ul className="mt-3 grid gap-2 text-sm text-zinc-300">
+                {avoidList.map((item) => (
+                  <li key={item}>• {item}</li>
+                ))}
+              </ul>
+            </div>
 
-            <div className="mt-5 rounded-3xl bg-zinc-950 p-5">
-              <p className="text-xs uppercase tracking-[0.25em] text-emerald-400">
-                Recommended Strategy
+            <div className="mt-4 rounded-3xl border border-zinc-800 bg-zinc-950 p-5">
+              <p className="text-sm text-zinc-400">Tomorrow Adjustment</p>
+              <p className="mt-3 text-sm leading-6 text-zinc-300">
+                {tomorrowAdjustment}
               </p>
-              <p className="mt-3 text-sm leading-6 text-zinc-200">{strategy}</p>
             </div>
           </div>
-        </section>
 
-        <section className="mt-5 grid gap-5 xl:grid-cols-3">
-          <InsightCard
-            title="What to avoid"
-            subtitle="กันไม่ให้วันหลุดไหลยาว"
-          >
-            <div className="grid gap-3">
-              {avoidList.map((item) => (
-                <div
-                  key={item}
-                  className="rounded-2xl border border-red-900/40 bg-red-950/20 p-4 text-sm text-red-100"
-                >
-                  {item}
-                </div>
-              ))}
-            </div>
-          </InsightCard>
+          <div className="grid gap-5">
+            <section className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
+              <p className="text-sm text-zinc-400">Current Numbers</p>
+              <h2 className="mt-1 text-2xl font-bold">
+                {formatDateForMenu(selectedDate)}
+              </h2>
 
-          <InsightCard title="Tomorrow adjustment" subtitle="ปรับพรุ่งนี้ให้ดีขึ้น">
-            <p className="rounded-2xl bg-zinc-950 p-4 text-sm leading-6 text-zinc-300">
-              {tomorrowAdjustment}
-            </p>
-          </InsightCard>
+              <div className="mt-5 grid gap-3 md:grid-cols-2">
+                <MetricCard
+                  label="Food Calories"
+                  value={`${totalCalories}`}
+                  unit="kcal"
+                  note={`Goal ${goals.calorieGoal} kcal`}
+                  score={getCalorieScore(totalCalories, goals.calorieGoal)}
+                />
 
-          <InsightCard title="Current numbers" subtitle="อ่านสถานะวันนี้">
-            <div className="grid gap-3">
-              <NumberRow
-                label="Weight"
-                value={dailyLog && dailyLog.weight ? `${dailyLog.weight} kg` : "-"}
-              />
-              <NumberRow
-                label="Protein"
-                value={`${totalProtein}g / ${goals.proteinGoal}g`}
-              />
-              <NumberRow
-                label="Protein Left"
-                value={`${Math.round(proteinLeft)}g`}
-              />
-              <NumberRow
-                label="Water"
-                value={
-                  dailyLog
-                    ? `${dailyLog.water}L / ${goals.waterGoal}L`
-                    : `- / ${goals.waterGoal}L`
-                }
-              />
-              <NumberRow
-                label="Workout"
-                value={`${workoutMinutes} / ${goals.workoutGoal} min`}
-              />
-              <NumberRow label="Workout Left" value={`${workoutLeft} min`} />
-            </div>
-          </InsightCard>
-        </section>
+                <MetricCard
+                  label="Workout Burn"
+                  value={`${totalBurn}`}
+                  unit="kcal"
+                  note="estimated"
+                  score={workoutScore}
+                />
 
-        <section className="mt-5 grid gap-5 xl:grid-cols-2">
-          <DetailPanel title="Food signals">
-            {selectedFoodLogs.length === 0 ? (
-              <EmptyText text="No food logs for this date" />
-            ) : (
-              selectedFoodLogs
-                .slice()
-                .reverse()
-                .map((log) => (
-                  <SmallRow
-                    key={log.id}
-                    title={log.foodName}
-                    detail={`${log.protein}g protein${
-                      log.sweetDrink ? " · sweet drink" : ""
-                    }${log.junkFood ? " · junk food" : ""}`}
-                  />
-                ))
-            )}
-          </DetailPanel>
+                <MetricCard
+                  label="Net Calories"
+                  value={`${netCalories}`}
+                  unit="kcal"
+                  note="food - burn"
+                  score={calorieScore}
+                />
 
-          <DetailPanel title="Workout signals">
-            {selectedWorkoutLogs.length === 0 ? (
-              <EmptyText text="No workout logs for this date" />
-            ) : (
-              selectedWorkoutLogs
-                .slice()
-                .reverse()
-                .map((log) => (
-                  <SmallRow
-                    key={log.id}
-                    title={log.type}
-                    detail={`${log.durationMinutes} minutes${
-                      log.distanceKm ? ` · ${log.distanceKm} km` : ""
-                    }${log.steps ? ` · ${log.steps} steps` : ""}`}
-                  />
-                ))
-            )}
-          </DetailPanel>
+                <MetricCard
+                  label="Protein"
+                  value={`${totalProtein}`}
+                  unit="g"
+                  note={`Goal ${goals.proteinGoal}g`}
+                  score={proteinScore}
+                />
+
+                <MetricCard
+                  label="Water"
+                  value={`${water}`}
+                  unit="L"
+                  note={`Goal ${goals.waterGoal}L`}
+                  score={waterScore}
+                />
+
+                <MetricCard
+                  label="Sleep"
+                  value={`${sleep}`}
+                  unit="h"
+                  note={`Goal ${goals.sleepGoal}h`}
+                  score={sleepScore}
+                />
+              </div>
+            </section>
+
+            <section className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
+              <p className="text-sm text-zinc-400">Signals</p>
+
+              <div className="mt-5 grid gap-3 md:grid-cols-3">
+                <SmallSignal label="Food logs" value={String(selectedFoodLogs.length)} />
+                <SmallSignal label="Workout logs" value={String(selectedWorkoutLogs.length)} />
+                <SmallSignal label="Workout min" value={String(totalWorkoutMinutes)} />
+                <SmallSignal label="Sweet drinks" value={String(sweetDrinkCount)} />
+                <SmallSignal label="Junk food" value={String(junkFoodCount)} />
+                <SmallSignal label="Food quality" value={`${foodQualityScore}/100`} />
+                <SmallSignal label="Snack level" value={dailyLog?.snackLevel ?? "-"} />
+                <SmallSignal label="Mood" value={dailyLog?.mood ?? "-"} />
+                <SmallSignal label="Weight" value={dailyLog?.weight ? `${dailyLog.weight} kg` : "-"} />
+              </div>
+            </section>
+          </div>
         </section>
       </section>
     </main>
   );
 }
 
-function ScoreRow({ label, value }: { label: string; value: number }) {
-  return (
-    <div>
-      <div className="flex items-center justify-between text-sm">
-        <span className="text-zinc-500">{label}</span>
-        <span className="font-bold text-zinc-300">{value}/100</span>
-      </div>
-
-      <div className="mt-2 h-2 overflow-hidden rounded-full bg-zinc-800">
-        <div
-          className="h-full rounded-full bg-emerald-400"
-          style={{ width: `${value}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function InsightCard({
-  title,
-  subtitle,
-  children,
+function MetricCard({
+  label,
+  value,
+  unit,
+  note,
+  score,
 }: {
-  title: string;
-  subtitle: string;
-  children: React.ReactNode;
+  label: string;
+  value: string;
+  unit: string;
+  note: string;
+  score: number;
 }) {
   return (
-    <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
-      <p className="text-sm text-zinc-400">{subtitle}</p>
-      <h2 className="mt-1 text-2xl font-bold">{title}</h2>
-      <div className="mt-5">{children}</div>
+    <div className="rounded-3xl border border-zinc-800 bg-zinc-950 p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs text-zinc-500">{label}</p>
+          <p className="mt-2 text-4xl font-black">
+            {value}
+            <span className="ml-1 text-lg text-zinc-500">{unit}</span>
+          </p>
+          <p className="mt-2 text-xs text-zinc-500">{note}</p>
+        </div>
+
+        <div className="rounded-full border border-zinc-800 px-3 py-1 text-xs font-bold text-zinc-300">
+          {score}
+        </div>
+      </div>
     </div>
   );
 }
 
-function NumberRow({ label, value }: { label: string; value: string }) {
+function SmallSignal({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-2xl bg-zinc-950 p-4 text-sm">
-      <span className="text-zinc-500">{label}</span>
-      <span className="font-bold text-zinc-200">{value}</span>
-    </div>
-  );
-}
-
-function DetailPanel({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
-      <p className="text-sm text-zinc-400">Signals</p>
-      <h2 className="mt-1 text-2xl font-bold">{title}</h2>
-      <div className="mt-5 grid gap-3">{children}</div>
-    </div>
-  );
-}
-
-function SmallRow({ title, detail }: { title: string; detail: string }) {
-  return (
-    <div className="rounded-2xl bg-zinc-950 p-4">
-      <p className="font-bold capitalize">{title}</p>
-      <p className="mt-1 text-sm text-zinc-500">{detail}</p>
-    </div>
-  );
-}
-
-function EmptyText({ text }: { text: string }) {
-  return (
-    <div className="rounded-2xl bg-zinc-950 p-5 text-sm text-zinc-500">
-      {text}
+    <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+      <p className="text-xs text-zinc-500">{label}</p>
+      <p className="mt-2 text-sm font-bold">{value}</p>
     </div>
   );
 }

@@ -215,3 +215,23 @@ textarea:focus {
       linear-gradient(180deg, #050505 0%, #09090b 48%, #050505 100%);
   }
 }
+/* Wider desktop dashboard frame */
+@media (min-width: 1024px) {
+  .max-w-7xl {
+    max-width: min(92vw, 96rem) !important;
+  }
+
+  .max-w-4xl {
+    max-width: min(92vw, 96rem) !important;
+  }
+}
+
+@media (min-width: 1600px) {
+  .max-w-7xl {
+    max-width: min(90vw, 104rem) !important;
+  }
+
+  .max-w-4xl {
+    max-width: min(90vw, 104rem) !important;
+  }
+}

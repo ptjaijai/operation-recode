@@ -783,13 +783,13 @@ export default function TodayPage() {
       <section className="recode-shell mx-auto min-h-screen w-full max-w-7xl px-5 py-6 md:px-8">
         <AppNav />
 
-        <section className="mb-8 flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
+        <section className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
           <div>
             <p className="recode-kicker">Operation: Recode</p>
-            <h1 className="mt-3 text-5xl font-black tracking-tight md:text-7xl">
+            <h1 className="mt-2 text-4xl font-black tracking-tight md:text-6xl">
               Today
             </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400 md:text-base">
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500">
               Your daily command center for check-in, food, workout, and recovery.
             </p>
           </div>
@@ -799,16 +799,16 @@ export default function TodayPage() {
           </div>
         </section>
 
-        <section className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr] xl:items-start">
-          <aside className="space-y-5 xl:sticky xl:top-28">
-            <section className="recode-card-strong rounded-[2rem] p-6 md:p-8">
+        <section className="grid gap-5 xl:grid-cols-[0.72fr_1.28fr] xl:items-start">
+          <aside className="space-y-4 xl:sticky xl:top-28">
+            <section className="recode-card-strong rounded-[2rem] p-5 md:p-6">
               <div className="flex items-start justify-between gap-5">
                 <div>
                   <p className="text-sm font-bold text-emerald-200">System Score</p>
-                  <p className="mt-4 text-8xl font-black tracking-tighter md:text-9xl">
+                  <p className="mt-3 text-7xl font-black tracking-tighter md:text-8xl">
                     {score}
                   </p>
-                  <p className="mt-1 text-2xl font-black text-zinc-200">
+                  <p className="mt-1 text-xl font-black text-zinc-200">
                     {getStatusText(score)}
                   </p>
                 </div>
@@ -818,17 +818,17 @@ export default function TodayPage() {
                 </div>
               </div>
 
-              <div className="mt-6 h-3 overflow-hidden rounded-full bg-black/35">
+              <div className="mt-5 h-2.5 overflow-hidden rounded-full bg-black/35">
                 <div
                   className="h-full rounded-full bg-emerald-400"
                   style={{ width: `${score}%` }}
                 />
               </div>
 
-              <p className="mt-5 text-sm leading-6 text-zinc-200">{coachLine}</p>
+              <p className="mt-4 text-sm leading-6 text-zinc-300">{coachLine}</p>
             </section>
 
-            <section className="recode-card rounded-[2rem] p-5 md:p-6">
+            <section className="recode-card rounded-[2rem] p-5">
               <p className="text-sm font-bold text-zinc-500">Today Metrics</p>
 
               <div className="mt-4 grid grid-cols-2 gap-3">
@@ -903,12 +903,12 @@ export default function TodayPage() {
             </section>
           </aside>
 
-          <section className="space-y-5">
-            <section className="recode-card rounded-[2rem] p-5 md:p-6">
+          <section className="space-y-4">
+            <section className="recode-card rounded-[2rem] p-5">
               <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
                 <div>
                   <p className="text-sm font-bold text-zinc-500">Daily Check-in</p>
-                  <h2 className="mt-1 text-3xl font-black">Baseline today</h2>
+                  <h2 className="mt-1 text-2xl font-black">Baseline today</h2>
                 </div>
 
                 <button
@@ -919,7 +919,7 @@ export default function TodayPage() {
                 </button>
               </div>
 
-              <div className="mt-6 grid gap-4 md:grid-cols-4">
+              <div className="mt-5 grid gap-4 md:grid-cols-4">
                 <Input
                   label="Weight kg"
                   type="number"
@@ -1018,11 +1018,11 @@ export default function TodayPage() {
               </div>
             </section>
 
-            <section className="recode-card rounded-[2rem] p-5 md:p-6">
+            <section className="recode-card rounded-[2rem] p-5">
               <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
                 <div>
                   <p className="text-sm font-bold text-zinc-500">Quick Add</p>
-                  <h2 className="mt-1 text-3xl font-black">Log fast</h2>
+                  <h2 className="mt-1 text-2xl font-black">Log fast</h2>
                 </div>
 
                 <p className="text-sm text-zinc-500">
@@ -1030,7 +1030,7 @@ export default function TodayPage() {
                 </p>
               </div>
 
-              <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+              <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
                 <QuickButton
                   label="+ Whey"
                   sub="25g · 120 kcal"
@@ -1134,7 +1134,7 @@ export default function TodayPage() {
             </section>
 
             <section className="grid gap-5 lg:grid-cols-2">
-              <section className="recode-card rounded-[2rem] p-5 md:p-6">
+              <section className="recode-card rounded-[2rem] p-5">
                 <div className="flex items-end justify-between gap-3">
                   <div>
                     <p className="text-sm font-bold text-zinc-500">Food Log</p>
@@ -1165,7 +1165,7 @@ export default function TodayPage() {
                 </div>
               </section>
 
-              <section className="recode-card rounded-[2rem] p-5 md:p-6">
+              <section className="recode-card rounded-[2rem] p-5">
                 <div className="flex items-end justify-between gap-3">
                   <div>
                     <p className="text-sm font-bold text-zinc-500">Workout Log</p>
@@ -1222,13 +1222,13 @@ function MetricCard({
   return (
     <Link
       href={href}
-      className="rounded-3xl border border-white/5 bg-black/20 p-4 hover:bg-white/[0.04]"
+      className="rounded-2xl border border-white/5 bg-black/20 p-3 hover:bg-white/[0.04]"
     >
       <p className="text-xs font-bold text-zinc-500">{label}</p>
-      <p className="mt-2 text-3xl font-black">{value}</p>
+      <p className="mt-2 text-2xl font-black">{value}</p>
       <p className="mt-1 text-xs text-zinc-500">{goal}</p>
 
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
         <div
           className="h-full rounded-full bg-emerald-400"
           style={{ width: `${percent}%` }}
@@ -1250,7 +1250,7 @@ function QuickButton({
   return (
     <button
       onClick={onClick}
-      className="rounded-2xl border border-white/5 bg-black/20 p-4 text-left hover:bg-white/[0.05]"
+      className="rounded-2xl border border-white/5 bg-black/20 p-3.5 text-left hover:bg-white/[0.05]"
     >
       <p className="text-sm font-black text-white">{label}</p>
       <p className="mt-1 text-xs text-zinc-500">{sub}</p>

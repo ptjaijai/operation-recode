@@ -1,1 +1,5 @@
-﻿export { default } from "../login/page";
+﻿import AccountClient from "./AccountClient";
+
+export default function AccountPage() {
+  return <AccountClient />;
+}

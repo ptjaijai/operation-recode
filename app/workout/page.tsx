@@ -369,6 +369,7 @@ export default function WorkoutPage() {
   const [dailyLogs, setDailyLogs] = useState<DailyLog[]>([]);
   const [selectedDate, setSelectedDate] = useState(today);
   const [form, setForm] = useState<WorkoutLog>(() => createEmptyForm(today));
+  const [editingId, setEditingId] = useState("");
   const [userId, setUserId] = useState("");
   const [syncStatus, setSyncStatus] = useState("Loading local workout data...");
 
@@ -457,11 +458,13 @@ export default function WorkoutPage() {
   }, [logs]);
 
   useEffect(() => {
+    if (editingId) return;
+
     setForm((current) => ({
       ...current,
       date: selectedDate,
     }));
-  }, [selectedDate]);
+  }, [selectedDate, editingId]);
 
   const availableDates = useMemo(() => {
     const dates = new Set<string>();
@@ -533,7 +536,9 @@ export default function WorkoutPage() {
         return;
       }
 
-      setSyncStatus("Workout log saved and synced.");
+      setSyncStatus(
+        editingId ? "Workout log updated and synced." : "Workout log saved and synced."
+      );
     } catch (error) {
       setSyncStatus(
         error instanceof Error
@@ -543,15 +548,44 @@ export default function WorkoutPage() {
     }
   }
 
+  function startEditWorkout(log: WorkoutLog) {
+    setEditingId(log.id);
+    setSelectedDate(log.date);
+    setForm({
+      ...log,
+      durationMinutes: Number(log.durationMinutes),
+      estimatedCalories: Number(log.estimatedCalories),
+      gamesPlayed: Number(log.gamesPlayed),
+      steps: Number(log.steps),
+      distanceKm: Number(log.distanceKm),
+      swimmingMeters: Number(log.swimmingMeters),
+      laps: Number(log.laps),
+      pushupSets: Number(log.pushupSets),
+      pushupReps: Number(log.pushupReps),
+      squatSets: Number(log.squatSets),
+      squatReps: Number(log.squatReps),
+      plankSets: Number(log.plankSets),
+      plankMinutes: Number(log.plankMinutes),
+    });
+    setSyncStatus(`Editing ${getWorkoutLabel(log.type)}`);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function cancelEdit() {
+    setEditingId("");
+    setForm(createEmptyForm(selectedDate));
+    setSyncStatus(userId ? "Edit cancelled. Cloud sync is ready." : "Edit cancelled.");
+  }
+
   async function saveWorkout() {
     if (Number(form.durationMinutes) <= 0) {
-      alert("ใส่เวลา workout ก่อน");
+      alert("Enter workout duration first.");
       return;
     }
 
-    const newLog: WorkoutLog = {
+    const savedLog: WorkoutLog = {
       ...form,
-      id: crypto.randomUUID(),
+      id: editingId || crypto.randomUUID(),
       date: selectedDate,
       durationMinutes: Number(form.durationMinutes),
       estimatedCalories: liveEstimatedCalories,
@@ -566,15 +600,20 @@ export default function WorkoutPage() {
       squatReps: Number(form.squatReps),
       plankSets: Number(form.plankSets),
       plankMinutes: Number(form.plankMinutes),
+      notes: form.notes.trim(),
     };
 
-    const nextLogs = [...logs, newLog];
+    const nextLogs = editingId
+      ? logs.map((log) => (log.id === editingId ? savedLog : log))
+      : [...logs, savedLog];
 
     setLogs(nextLogs);
     localStorage.setItem(storageKeys.workout, JSON.stringify(nextLogs));
-    setForm(createEmptyForm(selectedDate));
 
-    await saveLogToCloud(newLog);
+    await saveLogToCloud(savedLog);
+
+    setEditingId("");
+    setForm(createEmptyForm(selectedDate));
   }
 
   async function quickSaveWorkout(type: WorkoutType, minutes: number) {
@@ -601,10 +640,22 @@ export default function WorkoutPage() {
   }
 
   async function deleteWorkout(id: string) {
+    const targetLog = logs.find((log) => log.id === id);
+    const confirmed = confirm(
+      `Delete ${targetLog ? getWorkoutLabel(targetLog.type) : "this workout log"}?`
+    );
+
+    if (!confirmed) return;
+
     const nextLogs = logs.filter((log) => log.id !== id);
 
     setLogs(nextLogs);
     localStorage.setItem(storageKeys.workout, JSON.stringify(nextLogs));
+
+    if (editingId === id) {
+      setEditingId("");
+      setForm(createEmptyForm(selectedDate));
+    }
 
     if (!userId) {
       setSyncStatus("Deleted locally. Login to sync deletions.");
@@ -648,12 +699,12 @@ export default function WorkoutPage() {
             <h1 className="mt-2 text-3xl font-black tracking-tight md:text-6xl">
               Workout Tracker.
               <br />
-              Burn estimate.
+              Add or edit.
             </h1>
           </div>
 
           <div className="rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-zinc-300">
-            Workout / v2.0
+            Workout / v2.1
           </div>
         </nav>
 
@@ -728,8 +779,18 @@ export default function WorkoutPage() {
             </div>
 
             <div className="mt-5 rounded-3xl border border-zinc-800 bg-zinc-950 p-5">
-              <p className="text-sm text-zinc-400">Workout Check-in</p>
-              <h2 className="mt-1 text-2xl font-bold">Manual log</h2>
+              <p className="text-sm text-zinc-400">
+                {editingId ? "Editing Workout Log" : "Workout Check-in"}
+              </p>
+              <h2 className="mt-1 text-2xl font-bold">
+                {editingId ? "Update workout" : "Manual log"}
+              </h2>
+
+              {editingId && (
+                <div className="mt-4 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-4 text-sm text-emerald-100">
+                  Editing mode is on. Press Cancel Edit to add a new workout instead.
+                </div>
+              )}
 
               <div className="mt-5 grid gap-3 md:grid-cols-2">
                 <label className="block">
@@ -912,17 +973,26 @@ export default function WorkoutPage() {
                 <textarea
                   value={form.notes}
                   onChange={(event) => setForm({ ...form, notes: event.target.value })}
-                  placeholder="เช่น ตีหนัก / เดินชิล / วันนี้เหนื่อย / เข่าโอเคไหม"
+                  placeholder="Workout intensity, knee status, energy, or anything to remember"
                   className="mt-1 min-h-24 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
                 />
               </label>
 
-              <button
-                onClick={saveWorkout}
-                className="mt-4 w-full rounded-2xl bg-emerald-400 px-5 py-3 font-bold text-zinc-950 transition hover:bg-emerald-300"
-              >
-                Save Workout + Sync
-              </button>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <button
+                  onClick={saveWorkout}
+                  className="rounded-2xl bg-emerald-400 px-5 py-3 font-bold text-zinc-950 transition hover:bg-emerald-300"
+                >
+                  {editingId ? "Update Workout + Sync" : "Save Workout + Sync"}
+                </button>
+
+                <button
+                  onClick={cancelEdit}
+                  className="rounded-2xl border border-zinc-800 bg-zinc-900 px-5 py-3 font-bold text-zinc-300 transition hover:bg-zinc-800"
+                >
+                  {editingId ? "Cancel Edit" : "Clear Form"}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -984,7 +1054,11 @@ export default function WorkoutPage() {
                     .map((log) => (
                       <div
                         key={log.id}
-                        className="rounded-2xl bg-zinc-900 p-4 text-sm"
+                        className={
+                          editingId === log.id
+                            ? "rounded-2xl border border-emerald-400/50 bg-emerald-400/10 p-4 text-sm"
+                            : "rounded-2xl bg-zinc-900 p-4 text-sm"
+                        }
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div>
@@ -1002,17 +1076,40 @@ export default function WorkoutPage() {
                                 {log.distanceKm} km · {log.steps} steps
                               </p>
                             )}
+                            {log.type === "swimming" && (
+                              <p className="mt-1 text-zinc-500">
+                                {log.swimmingMeters} m · {log.laps} laps
+                              </p>
+                            )}
+                            {log.type === "home-workout" && (
+                              <p className="mt-1 text-zinc-500">
+                                Push {log.pushupSets}×{log.pushupReps} · Squat{" "}
+                                {log.squatSets}×{log.squatReps} · Plank{" "}
+                                {log.plankSets}×{log.plankMinutes}m
+                              </p>
+                            )}
                             {log.notes && (
-                              <p className="mt-1 text-zinc-500">{log.notes}</p>
+                              <p className="mt-2 text-xs leading-5 text-zinc-500">
+                                {log.notes}
+                              </p>
                             )}
                           </div>
 
-                          <button
-                            onClick={() => deleteWorkout(log.id)}
-                            className="rounded-xl border border-zinc-800 px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800"
-                          >
-                            Delete
-                          </button>
+                          <div className="grid gap-2">
+                            <button
+                              onClick={() => startEditWorkout(log)}
+                              className="rounded-xl border border-emerald-400/40 px-3 py-2 text-xs font-bold text-emerald-300 hover:bg-emerald-400/10"
+                            >
+                              Edit
+                            </button>
+
+                            <button
+                              onClick={() => deleteWorkout(log.id)}
+                              className="rounded-xl border border-zinc-800 px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800"
+                            >
+                              Delete
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))

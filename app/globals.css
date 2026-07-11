@@ -315,3 +315,65 @@ main textarea:focus {
     padding-bottom: 0;
   }
 }
+
+/* Food page visual polish */
+.recode-food-page .rounded-3xl,
+.recode-food-page .rounded-\[2rem\] {
+  border-radius: 1.75rem;
+}
+
+.recode-food-page section[class*="bg-zinc-900"],
+.recode-food-page div[class*="bg-zinc-900"] {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  background: rgba(24, 24, 27, 0.64) !important;
+  backdrop-filter: blur(18px);
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.recode-food-page div[class*="bg-zinc-950"],
+.recode-food-page section[class*="bg-zinc-950"] {
+  background: rgba(0, 0, 0, 0.24) !important;
+  border-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+.recode-food-page input,
+.recode-food-page select,
+.recode-food-page textarea {
+  border-radius: 1rem !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  background: rgba(0, 0, 0, 0.28) !important;
+}
+
+.recode-food-page input:focus,
+.recode-food-page select:focus,
+.recode-food-page textarea:focus {
+  border-color: rgba(52, 211, 153, 0.65) !important;
+}
+
+.recode-food-page button {
+  border-radius: 1rem;
+}
+
+.recode-food-page h1,
+.recode-food-page h2,
+.recode-food-page h3 {
+  letter-spacing: -0.04em;
+}
+
+@media (min-width: 1280px) {
+  .recode-food-page section.grid.xl\:grid-cols-\[0\.9fr_1\.1fr\] {
+    grid-template-columns: 0.8fr 1.2fr !important;
+  }
+
+  .recode-food-page nav.mb-8 {
+    margin-bottom: 1.5rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .recode-food-page nav.mb-8 {
+    margin-bottom: 1.25rem;
+  }
+}

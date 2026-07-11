@@ -226,7 +226,7 @@ export default function SettingsPage() {
 
   function exportBackup() {
     const backup = {
-      version: "operation-recode-backup-v6",
+      version: "operation-recode-backup-v7",
       exportedAt: new Date().toISOString(),
       saveMode,
       goals,
@@ -569,3 +569,4 @@ function NumberField({
     </label>
   );
 }
+

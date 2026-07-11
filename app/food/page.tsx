@@ -1,84 +1,162 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import AppNav from "../AppNav";
 import { createClient } from "../../lib/supabase/client";
-import { canSaveWithoutLogin, getSaveLockMessage } from "../../lib/recode/auth-mode";
+import {
+  AUTH_MODE_EVENT,
+  canSaveWithoutLogin,
+  getAuthMode,
+  getSaveLockMessage,
+} from "../../lib/recode/auth-mode";
 
-type MealType = "breakfast" | "lunch" | "dinner" | "snack" | "drink" | "other";
+type SaveMode = "loading" | "sync" | "guest" | "locked";
+
+type Goals = {
+  proteinGoal: number;
+  calorieGoal: number;
+};
 
 type FoodLog = {
   id: string;
   date: string;
-  mealType: MealType;
+  mealType: string;
   foodName: string;
   protein: number;
   calories: number;
   sweetDrink: boolean;
   junkFood: boolean;
   notes: string;
+  createdAt: string;
 };
 
-type Goals = {
-  targetWeight: number;
-  proteinGoal: number;
-  calorieGoal: number;
-  waterGoal: number;
-  sleepGoal: number;
-  workoutGoal: number;
-};
-
-type ProteinPreset = {
-  name: string;
+type QuickFood = {
+  id: string;
+  title: string;
+  mealType: string;
+  foodName: string;
   protein: number;
   calories: number;
-  mealType: MealType;
+  sweetDrink: boolean;
+  junkFood: boolean;
+  notes: string;
+  useCount: number;
+  createdAt: string;
+  lastUsedAt: string;
+};
+
+type FoodForm = {
+  mealType: string;
+  foodName: string;
+  protein: string;
+  calories: string;
+  sweetDrink: boolean;
+  junkFood: boolean;
+  notes: string;
+  saveToQuick: boolean;
 };
 
 const storageKeys = {
-  food: "operation-recode-food-logs",
   goals: "operation-recode-goals",
+  food: "operation-recode-food-logs",
+  quickFoods: "operation-recode-quick-foods",
 };
 
 const defaultGoals: Goals = {
-  targetWeight: 60,
   proteinGoal: 120,
   calorieGoal: 1800,
-  waterGoal: 2,
-  sleepGoal: 7,
-  workoutGoal: 30,
 };
 
-const proteinPresets: ProteinPreset[] = [
-  { name: "Whey 1 scoop", protein: 25, calories: 120, mealType: "drink" },
-  { name: "Eggs 2 pcs", protein: 12, calories: 140, mealType: "breakfast" },
-  { name: "Chicken breast", protein: 35, calories: 180, mealType: "lunch" },
-  { name: "Tuna can", protein: 25, calories: 120, mealType: "lunch" },
-  { name: "Greek yogurt", protein: 15, calories: 120, mealType: "snack" },
-  { name: "Lean pork", protein: 30, calories: 250, mealType: "dinner" },
-  { name: "Milk", protein: 8, calories: 130, mealType: "drink" },
-  { name: "Grilled chicken", protein: 30, calories: 220, mealType: "lunch" },
+const defaultQuickFoods: QuickFood[] = [
+  {
+    id: "preset-whey",
+    title: "Whey 1 scoop",
+    mealType: "drink",
+    foodName: "Whey 1 scoop",
+    protein: 25,
+    calories: 120,
+    sweetDrink: false,
+    junkFood: false,
+    notes: "Default quick food",
+    useCount: 0,
+    createdAt: new Date().toISOString(),
+    lastUsedAt: new Date().toISOString(),
+  },
+  {
+    id: "preset-eggs",
+    title: "Eggs 2 pcs",
+    mealType: "breakfast",
+    foodName: "Eggs 2 pcs",
+    protein: 12,
+    calories: 140,
+    sweetDrink: false,
+    junkFood: false,
+    notes: "Default quick food",
+    useCount: 0,
+    createdAt: new Date().toISOString(),
+    lastUsedAt: new Date().toISOString(),
+  },
+  {
+    id: "preset-chicken",
+    title: "Chicken breast",
+    mealType: "lunch",
+    foodName: "Chicken breast",
+    protein: 35,
+    calories: 180,
+    sweetDrink: false,
+    junkFood: false,
+    notes: "Default quick food",
+    useCount: 0,
+    createdAt: new Date().toISOString(),
+    lastUsedAt: new Date().toISOString(),
+  },
+  {
+    id: "preset-milk",
+    title: "Milk",
+    mealType: "drink",
+    foodName: "Milk",
+    protein: 8,
+    calories: 130,
+    sweetDrink: false,
+    junkFood: false,
+    notes: "Default quick food",
+    useCount: 0,
+    createdAt: new Date().toISOString(),
+    lastUsedAt: new Date().toISOString(),
+  },
 ];
 
-function getLocalDateString(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
+const emptyForm: FoodForm = {
+  mealType: "lunch",
+  foodName: "",
+  protein: "",
+  calories: "",
+  sweetDrink: false,
+  junkFood: false,
+  notes: "",
+  saveToQuick: false,
+};
 
-  return `${year}-${month}-${day}`;
+function todayString() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const date = String(now.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${date}`;
 }
 
-const today = getLocalDateString();
+function makeLocalId() {
+  return `local-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
 
-function isUuid(value: unknown) {
-  if (typeof value !== "string") return false;
-
+function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     value
   );
 }
 
-function toNumber(value: unknown, fallback: number) {
+function toNumber(value: unknown, fallback = 0) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
 
   if (typeof value === "string") {
@@ -87,6 +165,17 @@ function toNumber(value: unknown, fallback: number) {
   }
 
   return fallback;
+}
+
+function safeArray(value: string | null) {
+  if (!value) return [];
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 function loadGoals(): Goals {
@@ -98,131 +187,151 @@ function loadGoals(): Goals {
     const parsed = JSON.parse(saved) as Partial<Goals>;
 
     return {
-      targetWeight: toNumber(parsed.targetWeight, defaultGoals.targetWeight),
       proteinGoal: toNumber(parsed.proteinGoal, defaultGoals.proteinGoal),
       calorieGoal: toNumber(parsed.calorieGoal, defaultGoals.calorieGoal),
-      waterGoal: toNumber(parsed.waterGoal, defaultGoals.waterGoal),
-      sleepGoal: toNumber(parsed.sleepGoal, defaultGoals.sleepGoal),
-      workoutGoal: toNumber(parsed.workoutGoal, defaultGoals.workoutGoal),
     };
   } catch {
     return defaultGoals;
   }
 }
 
-function formatDateForMenu(dateString: string) {
-  if (!dateString) return "";
+function normalizeFoodLog(value: unknown): FoodLog | null {
+  if (!value || typeof value !== "object") return null;
 
-  const date = new Date(`${dateString}T00:00:00`);
+  const item = value as Record<string, unknown>;
 
-  return date.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "2-digit",
-    year: "numeric",
-  });
-}
+  const foodName =
+    typeof item.foodName === "string"
+      ? item.foodName
+      : typeof item.food_name === "string"
+      ? item.food_name
+      : "";
 
-function shiftDate(dateString: string, days: number) {
-  const [year, month, day] = dateString.split("-").map(Number);
-  const date = new Date(year, month - 1, day);
+  if (!foodName.trim()) return null;
 
-  date.setDate(date.getDate() + days);
-
-  return getLocalDateString(date);
-}
-
-function createEmptyForm(date: string): FoodLog {
   return {
-    id: crypto.randomUUID(),
-    date,
-    mealType: "lunch",
-    foodName: "",
-    protein: 0,
-    calories: 0,
-    sweetDrink: false,
-    junkFood: false,
-    notes: "",
-  };
-}
-
-function normalizeMealType(value: unknown): MealType {
-  if (
-    value === "breakfast" ||
-    value === "lunch" ||
-    value === "dinner" ||
-    value === "snack" ||
-    value === "drink" ||
-    value === "other"
-  ) {
-    return value;
-  }
-
-  return "other";
-}
-
-function normalizeLog(raw: Record<string, unknown>): FoodLog {
-  return {
-    id: isUuid(raw.id) ? String(raw.id) : crypto.randomUUID(),
-    date: typeof raw.date === "string" ? raw.date : today,
-    mealType: normalizeMealType(raw.mealType),
-    foodName:
-      typeof raw.foodName === "string"
-        ? raw.foodName
-        : typeof raw.name === "string"
-        ? raw.name
-        : typeof raw.food === "string"
-        ? raw.food
+    id:
+      typeof item.id === "string" && item.id.trim()
+        ? item.id
+        : makeLocalId(),
+    date:
+      typeof item.date === "string" && item.date.trim()
+        ? item.date
+        : todayString(),
+    mealType:
+      typeof item.mealType === "string"
+        ? item.mealType
+        : typeof item.meal_type === "string"
+        ? item.meal_type
+        : "other",
+    foodName,
+    protein: toNumber(item.protein, 0),
+    calories: toNumber(item.calories, 0),
+    sweetDrink: Boolean(
+      typeof item.sweetDrink === "boolean" ? item.sweetDrink : item.sweet_drink
+    ),
+    junkFood: Boolean(
+      typeof item.junkFood === "boolean" ? item.junkFood : item.junk_food
+    ),
+    notes:
+      typeof item.notes === "string"
+        ? item.notes
+        : typeof item.note === "string"
+        ? item.note
         : "",
-    protein:
-      typeof raw.protein === "number"
-        ? raw.protein
-        : typeof raw.proteinGrams === "number"
-        ? raw.proteinGrams
-        : typeof raw.proteinEstimate === "number"
-        ? raw.proteinEstimate
-        : 0,
-    calories:
-      typeof raw.calories === "number"
-        ? raw.calories
-        : typeof raw.kcal === "number"
-        ? raw.kcal
-        : typeof raw.calorieEstimate === "number"
-        ? raw.calorieEstimate
-        : 0,
-    sweetDrink:
-      typeof raw.sweetDrink === "boolean"
-        ? raw.sweetDrink
-        : typeof raw.hasSweetDrink === "boolean"
-        ? raw.hasSweetDrink
-        : false,
-    junkFood:
-      typeof raw.junkFood === "boolean"
-        ? raw.junkFood
-        : typeof raw.hasJunkFood === "boolean"
-        ? raw.hasJunkFood
-        : false,
-    notes: typeof raw.notes === "string" ? raw.notes : "",
+    createdAt:
+      typeof item.createdAt === "string"
+        ? item.createdAt
+        : typeof item.created_at === "string"
+        ? item.created_at
+        : new Date().toISOString(),
   };
 }
 
-function databaseToFoodLog(row: Record<string, unknown>): FoodLog {
+function normalizeQuickFood(value: unknown): QuickFood | null {
+  if (!value || typeof value !== "object") return null;
+
+  const item = value as Record<string, unknown>;
+
+  const foodName =
+    typeof item.foodName === "string" && item.foodName.trim()
+      ? item.foodName
+      : typeof item.title === "string"
+      ? item.title
+      : "";
+
+  if (!foodName.trim()) return null;
+
   return {
-    id: isUuid(row.id) ? String(row.id) : crypto.randomUUID(),
-    date: typeof row.date === "string" ? row.date : today,
-    mealType: normalizeMealType(row.meal_type),
-    foodName: typeof row.food_name === "string" ? row.food_name : "",
+    id:
+      typeof item.id === "string" && item.id.trim()
+        ? item.id
+        : makeLocalId(),
+    title:
+      typeof item.title === "string" && item.title.trim()
+        ? item.title
+        : foodName,
+    mealType: typeof item.mealType === "string" ? item.mealType : "other",
+    foodName,
+    protein: toNumber(item.protein, 0),
+    calories: toNumber(item.calories, 0),
+    sweetDrink: Boolean(item.sweetDrink),
+    junkFood: Boolean(item.junkFood),
+    notes: typeof item.notes === "string" ? item.notes : "",
+    useCount: toNumber(item.useCount, 0),
+    createdAt:
+      typeof item.createdAt === "string"
+        ? item.createdAt
+        : new Date().toISOString(),
+    lastUsedAt:
+      typeof item.lastUsedAt === "string"
+        ? item.lastUsedAt
+        : new Date().toISOString(),
+  };
+}
+
+function loadLocalFoodLogs() {
+  return safeArray(localStorage.getItem(storageKeys.food))
+    .map(normalizeFoodLog)
+    .filter(Boolean) as FoodLog[];
+}
+
+function loadQuickFoods() {
+  const saved = safeArray(localStorage.getItem(storageKeys.quickFoods))
+    .map(normalizeQuickFood)
+    .filter(Boolean) as QuickFood[];
+
+  if (saved.length > 0) return saved;
+
+  localStorage.setItem(storageKeys.quickFoods, JSON.stringify(defaultQuickFoods));
+  return defaultQuickFoods;
+}
+
+function saveLocalFoodLogs(logs: FoodLog[]) {
+  localStorage.setItem(storageKeys.food, JSON.stringify(logs));
+}
+
+function saveQuickFoods(foods: QuickFood[]) {
+  localStorage.setItem(storageKeys.quickFoods, JSON.stringify(foods));
+}
+
+function foodLogFromDatabase(row: Record<string, unknown>): FoodLog {
+  return {
+    id: String(row.id),
+    date: String(row.date),
+    mealType: String(row.meal_type ?? "other"),
+    foodName: String(row.food_name ?? ""),
     protein: toNumber(row.protein, 0),
     calories: toNumber(row.calories, 0),
-    sweetDrink: row.sweet_drink === true,
-    junkFood: row.junk_food === true,
-    notes: typeof row.notes === "string" ? row.notes : "",
+    sweetDrink: Boolean(row.sweet_drink),
+    junkFood: Boolean(row.junk_food),
+    notes: String(row.notes ?? ""),
+    createdAt: String(row.created_at ?? new Date().toISOString()),
   };
 }
 
 function foodLogToDatabase(log: FoodLog, userId: string) {
   return {
-    id: log.id,
     user_id: userId,
     date: log.date,
     meal_type: log.mealType,
@@ -236,765 +345,838 @@ function foodLogToDatabase(log: FoodLog, userId: string) {
   };
 }
 
-function mergeLogsById(localLogs: FoodLog[], cloudLogs: FoodLog[]) {
-  const map = new Map<string, FoodLog>();
-
-  cloudLogs.forEach((log) => {
-    map.set(log.id, log);
-  });
-
-  localLogs.forEach((log) => {
-    map.set(log.id, log);
-  });
-
-  return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
+function quickFoodFromLog(log: FoodLog): QuickFood {
+  return {
+    id: makeLocalId(),
+    title: log.foodName,
+    mealType: log.mealType,
+    foodName: log.foodName,
+    protein: log.protein,
+    calories: log.calories,
+    sweetDrink: log.sweetDrink,
+    junkFood: log.junkFood,
+    notes: log.notes,
+    useCount: 0,
+    createdAt: new Date().toISOString(),
+    lastUsedAt: new Date().toISOString(),
+  };
 }
 
-function getMealLabel(type: MealType) {
-  if (type === "breakfast") return "Breakfast";
-  if (type === "lunch") return "Lunch";
-  if (type === "dinner") return "Dinner";
-  if (type === "snack") return "Snack";
-  if (type === "drink") return "Drink";
+function quickFoodToLog(food: QuickFood, date: string): FoodLog {
+  return {
+    id: makeLocalId(),
+    date,
+    mealType: food.mealType,
+    foodName: food.foodName,
+    protein: food.protein,
+    calories: food.calories,
+    sweetDrink: food.sweetDrink,
+    junkFood: food.junkFood,
+    notes: food.notes,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function quickFoodKey(food: {
+  foodName: string;
+  mealType: string;
+  protein: number;
+  calories: number;
+}) {
+  return `${food.foodName.trim().toLowerCase()}-${food.mealType}-${food.protein}-${food.calories}`;
+}
+
+function mealLabel(mealType: string) {
+  if (mealType === "breakfast") return "Breakfast";
+  if (mealType === "lunch") return "Lunch";
+  if (mealType === "dinner") return "Dinner";
+  if (mealType === "snack") return "Snack";
+  if (mealType === "drink") return "Drink";
   return "Other";
 }
 
-function getProteinScore(protein: number, proteinGoal: number) {
-  if (protein >= proteinGoal) return 100;
-  if (protein >= proteinGoal * 0.85) return 85;
-  if (protein >= proteinGoal * 0.65) return 65;
-  if (protein >= proteinGoal * 0.5) return 45;
-  if (protein > 0) return 25;
-  return 0;
-}
-
-function getCalorieText(totalCalories: number, calorieGoal: number) {
-  const diff = calorieGoal - totalCalories;
-
-  if (totalCalories === 0) return "No calories logged yet.";
-  if (diff > 0) return `${diff} kcal left`;
-  if (diff === 0) return "exactly on target";
-
-  return `${Math.abs(diff)} kcal over`;
-}
-
-function getFoodCoachMessage({
-  protein,
-  proteinGoal,
-  calories,
-  calorieGoal,
-  sweetDrinkCount,
-  junkCount,
-}: {
-  protein: number;
-  proteinGoal: number;
-  calories: number;
-  calorieGoal: number;
-  sweetDrinkCount: number;
-  junkCount: number;
-}) {
-  const proteinLeft = Math.max(proteinGoal - protein, 0);
-  const caloriesOver = Math.max(calories - calorieGoal, 0);
-
-  if (protein === 0 && calories === 0) {
-    return "No food log yet. Add your first meal and estimate protein/calories roughly.";
-  }
-
-  if (caloriesOver > 0) {
-    return `Calories are over by about ${caloriesOver} kcal. Do not starve now, just keep the next meal clean.`;
-  }
-
-  if (protein < proteinGoal * 0.65) {
-    return `Protein is still low. Try to add around ${proteinLeft}g more protein today.`;
-  }
-
-  if (sweetDrinkCount > 0) {
-    return "Sweet drink logged. Next drink should be water or zero-calorie.";
-  }
-
-  if (junkCount > 0) {
-    return "Junk food logged. Do not starve. Just make the next meal cleaner.";
-  }
-
-  if (protein >= proteinGoal) {
-    return "Protein target reached. Good. Now avoid random snacks.";
-  }
-
-  return `Good progress. About ${proteinLeft}g protein left to hit todayโ€s goal.`;
-}
-
 export default function FoodPage() {
-  const [logs, setLogs] = useState<FoodLog[]>([]);
+  const [selectedDate, setSelectedDate] = useState(todayString());
   const [goals, setGoals] = useState<Goals>(defaultGoals);
-  const [selectedDate, setSelectedDate] = useState(today);
-  const [form, setForm] = useState<FoodLog>(() => createEmptyForm(today));
+  const [foodLogs, setFoodLogs] = useState<FoodLog[]>([]);
+  const [quickFoods, setQuickFoods] = useState<QuickFood[]>([]);
+  const [form, setForm] = useState<FoodForm>(emptyForm);
   const [editingId, setEditingId] = useState("");
+  const [saveMode, setSaveMode] = useState<SaveMode>("loading");
   const [userId, setUserId] = useState("");
-  const [syncStatus, setSyncStatus] = useState("Loading local food data...");
+  const [message, setMessage] = useState("Loading food tracker...");
+
+  const canWrite = saveMode === "sync" || saveMode === "guest";
 
   useEffect(() => {
-    async function loadFoodData() {
+    async function loadFoodPage() {
       setGoals(loadGoals());
 
-      const saved = localStorage.getItem(storageKeys.food);
-      let localLogs: FoodLog[] = [];
+      const localLogs = loadLocalFoodLogs();
+      const localQuickFoods = loadQuickFoods();
 
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-
-          if (Array.isArray(parsed)) {
-            localLogs = parsed.map((item) => normalizeLog(item));
-            setLogs(localLogs);
-          }
-        } catch {
-          localLogs = [];
-          setLogs([]);
-        }
-      }
+      setFoodLogs(localLogs);
+      setQuickFoods(localQuickFoods);
 
       try {
         const supabase = createClient();
-        const { data: userData } = await supabase.auth.getUser();
+        const { data } = await supabase.auth.getSession();
+        const currentUser = data.session?.user;
 
-        if (!userData.user) {
-          setSyncStatus("Not logged in. Food logs are local only.");
-          return;
-        }
+        if (currentUser) {
+          setUserId(currentUser.id);
+          setSaveMode("sync");
+          setMessage("Logged in. Food logs can sync.");
 
-        setUserId(userData.user.id);
-        setSyncStatus("Loading cloud food logs...");
-
-        const { data, error } = await supabase
-          .from("food_logs")
-          .select("*")
-          .eq("user_id", userData.user.id)
-          .order("date", { ascending: true });
-
-        if (error) {
-          setSyncStatus(`Cloud load failed: ${error.message}`);
-          return;
-        }
-
-        const cloudLogs = (data ?? []).map((item) =>
-          databaseToFoodLog(item as Record<string, unknown>)
-        );
-
-        const mergedLogs = mergeLogsById(localLogs, cloudLogs);
-
-        setLogs(mergedLogs);
-        localStorage.setItem(storageKeys.food, JSON.stringify(mergedLogs));
-
-        if (mergedLogs.length > 0) {
-          const rows = mergedLogs.map((log) =>
-            foodLogToDatabase(log, userData.user!.id)
-          );
-
-          const { error: upsertError } = await supabase
+          const { data: cloudRows, error } = await supabase
             .from("food_logs")
-            .upsert(rows, { onConflict: "id" });
+            .select("*")
+            .eq("user_id", currentUser.id)
+            .order("date", { ascending: false })
+            .order("created_at", { ascending: false })
+            .limit(400);
 
-          if (upsertError) {
-            setSyncStatus(`Cloud sync failed: ${upsertError.message}`);
+          if (error) {
+            setMessage(`Cloud food load failed: ${error.message}`);
             return;
           }
+
+          if (cloudRows && cloudRows.length > 0) {
+            const cloudLogs = cloudRows.map((row) =>
+              foodLogFromDatabase(row as Record<string, unknown>)
+            );
+
+            setFoodLogs(cloudLogs);
+            saveLocalFoodLogs(cloudLogs);
+          }
+
+          return;
         }
 
-        setSyncStatus("Food logs synced with Supabase.");
+        if (getAuthMode() === "guest") {
+          setSaveMode("guest");
+          setMessage("Guest Mode. Food logs save on this device only.");
+          return;
+        }
+
+        setSaveMode("locked");
+        setMessage("Food saving is locked. Login or use Guest Mode first.");
       } catch (error) {
-        setSyncStatus(
-          error instanceof Error ? error.message : "Could not connect to Supabase."
+        if (getAuthMode() === "guest") {
+          setSaveMode("guest");
+          setMessage("Guest Mode. Food logs save on this device only.");
+          return;
+        }
+
+        setSaveMode("locked");
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : "Food saving is locked. Login or use Guest Mode first."
         );
       }
     }
 
-    loadFoodData();
+    loadFoodPage();
+
+    function refreshMode() {
+      if (getAuthMode() === "guest") {
+        setSaveMode("guest");
+        setMessage("Guest Mode. Food logs save on this device only.");
+      }
+    }
+
+    window.addEventListener(AUTH_MODE_EVENT, refreshMode);
+    window.addEventListener("focus", refreshMode);
+
+    return () => {
+      window.removeEventListener(AUTH_MODE_EVENT, refreshMode);
+      window.removeEventListener("focus", refreshMode);
+    };
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem(storageKeys.food, JSON.stringify(logs));
-  }, [logs]);
+  const todaysLogs = useMemo(() => {
+    return foodLogs
+      .filter((log) => log.date === selectedDate)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }, [foodLogs, selectedDate]);
 
-  useEffect(() => {
-    if (editingId) return;
-
-    setForm((current) => ({
-      ...current,
-      date: selectedDate,
-    }));
-  }, [selectedDate, editingId]);
-
-  const availableDates = useMemo(() => {
-    const dates = new Set<string>();
-
-    dates.add(today);
-
-    logs.forEach((log) => {
-      if (log.date) dates.add(log.date);
+  const sortedQuickFoods = useMemo(() => {
+    return [...quickFoods].sort((a, b) => {
+      if (b.useCount !== a.useCount) return b.useCount - a.useCount;
+      return b.lastUsedAt.localeCompare(a.lastUsedAt);
     });
+  }, [quickFoods]);
 
-    return Array.from(dates).sort((a, b) => b.localeCompare(a));
-  }, [logs]);
+  const totalProtein = todaysLogs.reduce((sum, log) => sum + log.protein, 0);
+  const totalCalories = todaysLogs.reduce((sum, log) => sum + log.calories, 0);
+  const sweetDrinkCount = todaysLogs.filter((log) => log.sweetDrink).length;
+  const junkFoodCount = todaysLogs.filter((log) => log.junkFood).length;
 
-  const selectedLogs = useMemo(() => {
-    return logs.filter((log) => log.date === selectedDate);
-  }, [logs, selectedDate]);
+  const proteinLeft = Math.max(0, goals.proteinGoal - totalProtein);
+  const caloriesLeft = goals.calorieGoal - totalCalories;
 
-  const totalProtein = selectedLogs.reduce((sum, log) => sum + log.protein, 0);
-  const totalCalories = selectedLogs.reduce((sum, log) => sum + log.calories, 0);
+  function blockIfLocked() {
+    if (canWrite || canSaveWithoutLogin()) return false;
 
-  const proteinLeft = Math.max(goals.proteinGoal - totalProtein, 0);
+    alert(getSaveLockMessage());
+    setMessage("Locked. Login or enable Guest Mode before saving food.");
+    return true;
+  }
 
-  const proteinScore = getProteinScore(totalProtein, goals.proteinGoal);
-  const proteinPercent = Math.min((totalProtein / goals.proteinGoal) * 100, 100);
-  const caloriePercent = Math.min((totalCalories / goals.calorieGoal) * 100, 100);
+  async function syncInsertOrUpdate(log: FoodLog) {
+    if (saveMode !== "sync" || !userId) return log;
 
-  const sweetDrinkCount = selectedLogs.filter((log) => log.sweetDrink).length;
-  const junkCount = selectedLogs.filter((log) => log.junkFood).length;
+    const supabase = createClient();
 
-  async function saveLogToCloud(log: FoodLog) {
-    if (!userId) {
-      setSyncStatus("Saved locally. Login to sync food logs.");
+    if (isUuid(log.id)) {
+      const { data, error } = await supabase
+        .from("food_logs")
+        .update(foodLogToDatabase(log, userId))
+        .eq("id", log.id)
+        .eq("user_id", userId)
+        .select("*")
+        .single();
+
+      if (error) throw new Error(error.message);
+
+      return foodLogFromDatabase(data as Record<string, unknown>);
+    }
+
+    const { data, error } = await supabase
+      .from("food_logs")
+      .insert(foodLogToDatabase(log, userId))
+      .select("*")
+      .single();
+
+    if (error) throw new Error(error.message);
+
+    return foodLogFromDatabase(data as Record<string, unknown>);
+  }
+
+  async function addFoodLog(log: FoodLog) {
+    const savedLog = await syncInsertOrUpdate(log);
+
+    const nextLogs = [savedLog, ...foodLogs.filter((item) => item.id !== log.id)];
+
+    setFoodLogs(nextLogs);
+    saveLocalFoodLogs(nextLogs);
+
+    return savedLog;
+  }
+
+  async function saveFood(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (blockIfLocked()) return;
+
+    if (!form.foodName.trim()) {
+      setMessage("Enter food name first.");
       return;
     }
 
+    const nextLog: FoodLog = {
+      id: editingId || makeLocalId(),
+      date: selectedDate,
+      mealType: form.mealType,
+      foodName: form.foodName.trim(),
+      protein: toNumber(form.protein, 0),
+      calories: toNumber(form.calories, 0),
+      sweetDrink: form.sweetDrink,
+      junkFood: form.junkFood,
+      notes: form.notes.trim(),
+      createdAt: editingId
+        ? foodLogs.find((log) => log.id === editingId)?.createdAt ??
+          new Date().toISOString()
+        : new Date().toISOString(),
+    };
+
     try {
-      const supabase = createClient();
+      const savedLog = await addFoodLog(nextLog);
 
-      const { error } = await supabase
-        .from("food_logs")
-        .upsert(foodLogToDatabase(log, userId), { onConflict: "id" });
-
-      if (error) {
-        setSyncStatus(`Saved locally, cloud sync failed: ${error.message}`);
-        return;
+      if (form.saveToQuick) {
+        saveFoodToQuick(savedLog, false);
       }
 
-      setSyncStatus(editingId ? "Food log updated and synced." : "Food log saved and synced.");
+      setForm(emptyForm);
+      setEditingId("");
+      setMessage(editingId ? "Food updated." : "Food saved.");
     } catch (error) {
-      setSyncStatus(
-        error instanceof Error
-          ? `Saved locally, cloud sync failed: ${error.message}`
-          : "Saved locally, cloud sync failed."
+      setMessage(error instanceof Error ? error.message : "Save food failed.");
+    }
+  }
+
+  function editFood(log: FoodLog) {
+    setEditingId(log.id);
+    setForm({
+      mealType: log.mealType,
+      foodName: log.foodName,
+      protein: String(log.protein),
+      calories: String(log.calories),
+      sweetDrink: log.sweetDrink,
+      junkFood: log.junkFood,
+      notes: log.notes,
+      saveToQuick: false,
+    });
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function deleteFood(log: FoodLog) {
+    if (blockIfLocked()) return;
+
+    const confirmed = confirm(`Delete ${log.foodName}?`);
+
+    if (!confirmed) return;
+
+    try {
+      if (saveMode === "sync" && userId && isUuid(log.id)) {
+        const supabase = createClient();
+
+        const { error } = await supabase
+          .from("food_logs")
+          .delete()
+          .eq("id", log.id)
+          .eq("user_id", userId);
+
+        if (error) {
+          setMessage(error.message);
+          return;
+        }
+      }
+
+      const nextLogs = foodLogs.filter((item) => item.id !== log.id);
+      setFoodLogs(nextLogs);
+      saveLocalFoodLogs(nextLogs);
+      setMessage("Food deleted.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Delete failed.");
+    }
+  }
+
+  function saveFoodToQuick(log: FoodLog, showMessage = true) {
+    const newQuickFood = quickFoodFromLog(log);
+    const newKey = quickFoodKey(newQuickFood);
+
+    const existing = quickFoods.find((food) => quickFoodKey(food) === newKey);
+
+    let nextQuickFoods: QuickFood[];
+
+    if (existing) {
+      nextQuickFoods = quickFoods.map((food) =>
+        food.id === existing.id
+          ? {
+              ...food,
+              title: newQuickFood.title,
+              foodName: newQuickFood.foodName,
+              mealType: newQuickFood.mealType,
+              protein: newQuickFood.protein,
+              calories: newQuickFood.calories,
+              sweetDrink: newQuickFood.sweetDrink,
+              junkFood: newQuickFood.junkFood,
+              notes: newQuickFood.notes,
+              lastUsedAt: new Date().toISOString(),
+            }
+          : food
+      );
+
+      if (showMessage) setMessage(`${log.foodName} is already in Quick Save.`);
+    } else {
+      nextQuickFoods = [newQuickFood, ...quickFoods];
+
+      if (showMessage) setMessage(`${log.foodName} added to Quick Save.`);
+    }
+
+    setQuickFoods(nextQuickFoods);
+    saveQuickFoods(nextQuickFoods);
+  }
+
+  async function quickSaveFood(food: QuickFood) {
+    if (blockIfLocked()) return;
+
+    const log = quickFoodToLog(food, selectedDate);
+
+    try {
+      await addFoodLog(log);
+
+      const nextQuickFoods = quickFoods.map((item) =>
+        item.id === food.id
+          ? {
+              ...item,
+              useCount: item.useCount + 1,
+              lastUsedAt: new Date().toISOString(),
+            }
+          : item
+      );
+
+      setQuickFoods(nextQuickFoods);
+      saveQuickFoods(nextQuickFoods);
+
+      setMessage(`${food.title} quick saved.`);
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Quick save food failed."
       );
     }
   }
 
-  function applyPreset(preset: ProteinPreset) {
-    setForm({
-      ...form,
-      mealType: preset.mealType,
-      foodName: preset.name,
-      protein: preset.protein,
-      calories: preset.calories,
-      sweetDrink: false,
-      junkFood: false,
-    });
-  }
+  function deleteQuickFood(food: QuickFood) {
+    const confirmed = confirm(`Remove ${food.title} from Quick Save?`);
 
-  async function quickSavePreset(preset: ProteinPreset) {
-    const newLog: FoodLog = {
-      id: crypto.randomUUID(),
-      date: selectedDate,
-      mealType: preset.mealType,
-      foodName: preset.name,
-      protein: preset.protein,
-      calories: preset.calories,
-      sweetDrink: false,
-      junkFood: false,
-      notes: "Quick add",
-    };
+    if (!confirmed) return;
 
-    const nextLogs = [...logs, newLog];
-    setLogs(nextLogs);
-    localStorage.setItem(storageKeys.food, JSON.stringify(nextLogs));
+    const nextQuickFoods = quickFoods.filter((item) => item.id !== food.id);
 
-    await saveLogToCloud(newLog);
-  }
-
-  function startEditFood(log: FoodLog) {
-    setEditingId(log.id);
-    setSelectedDate(log.date);
-    setForm({
-      ...log,
-      protein: Number(log.protein),
-      calories: Number(log.calories),
-    });
-    setSyncStatus(`Editing ${log.foodName}`);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setQuickFoods(nextQuickFoods);
+    saveQuickFoods(nextQuickFoods);
+    setMessage(`${food.title} removed from Quick Save.`);
   }
 
   function cancelEdit() {
     setEditingId("");
-    setForm(createEmptyForm(selectedDate));
-    setSyncStatus(userId ? "Edit cancelled. Cloud sync is ready." : "Edit cancelled.");
-  }
-
-  async function saveFood() {
-    if (!form.foodName.trim()) {
-      alert("Enter food name first.");
-      return;
-    }
-
-    const savedLog: FoodLog = {
-      ...form,
-      id: editingId || crypto.randomUUID(),
-      date: selectedDate,
-      foodName: form.foodName.trim(),
-      protein: Number(form.protein),
-      calories: Number(form.calories),
-      sweetDrink: Boolean(form.sweetDrink),
-      junkFood: Boolean(form.junkFood),
-      notes: form.notes.trim(),
-    };
-
-    const nextLogs = editingId
-      ? logs.map((log) => (log.id === editingId ? savedLog : log))
-      : [...logs, savedLog];
-
-    setLogs(nextLogs);
-    localStorage.setItem(storageKeys.food, JSON.stringify(nextLogs));
-
-    await saveLogToCloud(savedLog);
-
-    setEditingId("");
-    setForm(createEmptyForm(selectedDate));
-  }
-
-  async function deleteFood(id: string) {
-    const targetLog = logs.find((log) => log.id === id);
-    const confirmed = confirm(`Delete ${targetLog?.foodName ?? "this food log"}?`);
-
-    if (!confirmed) return;
-
-    const nextLogs = logs.filter((log) => log.id !== id);
-
-    setLogs(nextLogs);
-    localStorage.setItem(storageKeys.food, JSON.stringify(nextLogs));
-
-    if (editingId === id) {
-      setEditingId("");
-      setForm(createEmptyForm(selectedDate));
-    }
-
-    if (!userId) {
-      setSyncStatus("Deleted locally. Login to sync deletions.");
-      return;
-    }
-
-    try {
-      const supabase = createClient();
-
-      const { error } = await supabase
-        .from("food_logs")
-        .delete()
-        .eq("user_id", userId)
-        .eq("id", id);
-
-      if (error) {
-        setSyncStatus(`Deleted locally, cloud delete failed: ${error.message}`);
-        return;
-      }
-
-      setSyncStatus("Food log deleted from cloud.");
-    } catch (error) {
-      setSyncStatus(
-        error instanceof Error
-          ? `Deleted locally, cloud delete failed: ${error.message}`
-          : "Deleted locally, cloud delete failed."
-      );
-    }
+    setForm(emptyForm);
+    setMessage("Edit cancelled.");
   }
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-white">
-      <section className="mx-auto min-h-screen w-full max-w-7xl px-5 py-6 md:px-8">
+    <main className="recode-food-page min-h-screen text-white">
+      <section className="recode-shell mx-auto min-h-screen w-full max-w-7xl px-5 py-6 md:px-8">
         <AppNav />
 
-        <nav className="mb-8 flex items-center justify-between gap-4">
+        <section className="mb-8 flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
           <div>
-            <p className="text-xs uppercase tracking-[0.35em] text-emerald-400">
-              Operation: Recode
-            </p>
-            <h1 className="mt-2 text-3xl font-black tracking-tight md:text-6xl">
-              Food Tracker.
-              <br />
-              Add or edit.
+            <p className="recode-kicker">Operation: Recode</p>
+            <h1 className="mt-3 text-5xl font-black tracking-tight md:text-7xl">
+              Food
             </h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400 md:text-base">
+              Track protein, calories, and save frequent meals for one-tap logging.
+            </p>
           </div>
 
-          <div className="rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-zinc-300">
-            Food / v2.1
-          </div>
-        </nav>
+          <div className="flex flex-wrap gap-3">
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(event) => setSelectedDate(event.target.value)}
+              className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-black text-white outline-none"
+            />
 
-        <section className="mb-5 rounded-3xl border border-emerald-400/30 bg-emerald-400/10 p-5 text-sm text-emerald-100">
-          {syncStatus}
-        </section>
-
-        <section className="mb-5 rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <p className="text-sm text-zinc-400">Date Menu</p>
-              <h2 className="mt-1 text-2xl font-bold">Select Date</h2>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={() => setSelectedDate(shiftDate(selectedDate, -1))}
-                className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-300 hover:bg-zinc-800"
-              >
-                โ Prev
-              </button>
-
-              <button
-                onClick={() => setSelectedDate(today)}
-                className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-black text-zinc-950 hover:bg-emerald-300"
-              >
-                Today
-              </button>
-
-              <button
-                onClick={() => setSelectedDate(shiftDate(selectedDate, 1))}
-                className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-300 hover:bg-zinc-800"
-              >
-                Next โ’
-              </button>
-
-              <select
-                value={selectedDate}
-                onChange={(event) => setSelectedDate(event.target.value)}
-                className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
-              >
-                {availableDates.map((date) => (
-                  <option key={date} value={date}>
-                    {date === today ? "Today โ€” " : ""}
-                    {formatDateForMenu(date)}
-                  </option>
-                ))}
-              </select>
-
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(event) => setSelectedDate(event.target.value)}
-                className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
-              />
-            </div>
+            <ModeBadge mode={saveMode} />
           </div>
         </section>
 
-        <section className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
-          <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
-            <p className="text-sm text-zinc-400">Quick Add</p>
-            <h2 className="mt-1 text-2xl font-bold">Protein presets</h2>
+        <section className="mb-5 rounded-3xl border border-white/10 bg-white/[0.04] p-5 text-sm font-bold text-zinc-300">
+          {message}
+        </section>
 
-            <div className="mt-5 grid gap-3 md:grid-cols-2">
-              {proteinPresets.map((preset) => (
-                <div
-                  key={preset.name}
-                  className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4"
-                >
-                  <div>
-                    <p className="font-bold">{preset.name}</p>
-                    <p className="mt-1 text-sm text-zinc-500">
-                      {preset.protein}g protein ยท {preset.calories} kcal ยท{" "}
-                      {getMealLabel(preset.mealType)}
-                    </p>
+        {saveMode === "locked" && (
+          <section className="mb-5 rounded-[2rem] border border-red-400/25 bg-red-400/10 p-5">
+            <p className="text-sm font-black text-red-200">Food saving locked</p>
+            <p className="mt-2 text-sm leading-6 text-zinc-300">
+              Login or continue as Guest Mode before saving food logs.
+            </p>
+          </section>
+        )}
+
+        <section className="mb-5 grid gap-4 md:grid-cols-4">
+          <SummaryCard
+            label="Protein"
+            value={`${Math.round(totalProtein)}g`}
+            detail={`${Math.round(proteinLeft)}g left`}
+          />
+
+          <SummaryCard
+            label="Calories"
+            value={`${Math.round(totalCalories)}`}
+            detail={
+              caloriesLeft >= 0
+                ? `${Math.round(caloriesLeft)} kcal left`
+                : `${Math.abs(Math.round(caloriesLeft))} kcal over`
+            }
+          />
+
+          <SummaryCard
+            label="Meals"
+            value={`${todaysLogs.length}`}
+            detail="logged today"
+          />
+
+          <SummaryCard
+            label="Quality"
+            value={`${sweetDrinkCount + junkFoodCount}`}
+            detail="sweet / junk flags"
+          />
+        </section>
+
+        <section className="grid gap-5 xl:grid-cols-[0.88fr_1.12fr]">
+          <section className="space-y-5">
+            <section className="recode-card rounded-[2rem] p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-black uppercase tracking-[0.25em] text-zinc-500">
+                    Quick Save
+                  </p>
+                  <h2 className="mt-3 text-3xl font-black tracking-tight">
+                    Frequent foods
+                  </h2>
+                </div>
+
+                <div className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs font-black text-zinc-400">
+                  {quickFoods.length} saved
+                </div>
+              </div>
+
+              <p className="mt-3 text-sm leading-6 text-zinc-400">
+                Food you eat often will stay here. Press Quick Save to log it today.
+              </p>
+
+              <div className="mt-6 grid gap-3">
+                {sortedQuickFoods.map((food) => (
+                  <div
+                    key={food.id}
+                    className="rounded-3xl border border-white/5 bg-black/20 p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-base font-black text-white">
+                          {food.title}
+                        </p>
+                        <p className="mt-1 text-xs font-bold text-zinc-500">
+                          {mealLabel(food.mealType)} · {food.protein}g protein ·{" "}
+                          {food.calories} kcal
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={() => deleteQuickFood(food)}
+                        className="rounded-full border border-white/10 px-3 py-1 text-xs font-black text-zinc-500 hover:border-red-400/30 hover:text-red-200"
+                      >
+                        Remove
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={() => quickSaveFood(food)}
+                      className={
+                        canWrite
+                          ? "mt-4 w-full rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-black text-zinc-950 hover:bg-emerald-300"
+                          : "mt-4 w-full rounded-2xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm font-black text-red-200"
+                      }
+                    >
+                      {canWrite ? "Quick Save" : "Locked"}
+                    </button>
                   </div>
+                ))}
+              </div>
+            </section>
 
-                  <div className="mt-4 grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => applyPreset(preset)}
-                      className="rounded-xl border border-zinc-800 px-3 py-2 text-xs font-bold text-zinc-300 hover:bg-zinc-800"
-                    >
-                      Use Form
-                    </button>
+            <section className="recode-card rounded-[2rem] p-6">
+              <p className="text-sm font-black uppercase tracking-[0.25em] text-zinc-500">
+                Manual
+              </p>
 
-                    <button
-                      onClick={() => quickSavePreset(preset)}
-                      className="rounded-xl bg-emerald-400 px-3 py-2 text-xs font-black text-zinc-950 hover:bg-emerald-300"
+              <h2 className="mt-3 text-3xl font-black tracking-tight">
+                {editingId ? "Edit food" : "Add food"}
+              </h2>
+
+              <form onSubmit={saveFood} className="mt-6 grid gap-4">
+                <label className="block">
+                  <span className="recode-label">Food name</span>
+                  <input
+                    value={form.foodName}
+                    onChange={(event) =>
+                      setForm({ ...form, foodName: event.target.value })
+                    }
+                    placeholder="เช่น ข้าวมันไก่ / เวย์ / ไข่ต้ม"
+                    className="recode-input"
+                  />
+                </label>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="recode-label">Meal</span>
+                    <select
+                      value={form.mealType}
+                      onChange={(event) =>
+                        setForm({ ...form, mealType: event.target.value })
+                      }
+                      className="recode-input"
                     >
-                      Quick Save
+                      <option value="breakfast">Breakfast</option>
+                      <option value="lunch">Lunch</option>
+                      <option value="dinner">Dinner</option>
+                      <option value="snack">Snack</option>
+                      <option value="drink">Drink</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </label>
+
+                  <label className="block">
+                    <span className="recode-label">Protein (g)</span>
+                    <input
+                      type="number"
+                      value={form.protein}
+                      onChange={(event) =>
+                        setForm({ ...form, protein: event.target.value })
+                      }
+                      placeholder="0"
+                      className="recode-input"
+                    />
+                  </label>
+                </div>
+
+                <label className="block">
+                  <span className="recode-label">Calories</span>
+                  <input
+                    type="number"
+                    value={form.calories}
+                    onChange={(event) =>
+                      setForm({ ...form, calories: event.target.value })
+                    }
+                    placeholder="0"
+                    className="recode-input"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="recode-label">Notes</span>
+                  <textarea
+                    value={form.notes}
+                    onChange={(event) =>
+                      setForm({ ...form, notes: event.target.value })
+                    }
+                    placeholder="optional"
+                    className="recode-input min-h-24 resize-none"
+                  />
+                </label>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <CheckPill
+                    checked={form.sweetDrink}
+                    label="Sweet drink"
+                    onClick={() =>
+                      setForm({ ...form, sweetDrink: !form.sweetDrink })
+                    }
+                  />
+
+                  <CheckPill
+                    checked={form.junkFood}
+                    label="Junk food"
+                    onClick={() =>
+                      setForm({ ...form, junkFood: !form.junkFood })
+                    }
+                  />
+
+                  <CheckPill
+                    checked={form.saveToQuick}
+                    label="Save to Quick"
+                    onClick={() =>
+                      setForm({ ...form, saveToQuick: !form.saveToQuick })
+                    }
+                  />
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <button
+                    type="submit"
+                    className={
+                      canWrite
+                        ? "recode-button-primary"
+                        : "rounded-2xl border border-red-400/25 bg-red-400/10 px-5 py-4 text-sm font-black text-red-200"
+                    }
+                  >
+                    {canWrite
+                      ? editingId
+                        ? "Update Food"
+                        : "Save Food"
+                      : "Locked"}
+                  </button>
+
+                  {editingId ? (
+                    <button
+                      type="button"
+                      onClick={cancelEdit}
+                      className="recode-button-ghost"
+                    >
+                      Cancel Edit
                     </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setForm(emptyForm)}
+                      className="recode-button-ghost"
+                    >
+                      Clear Form
+                    </button>
+                  )}
+                </div>
+              </form>
+            </section>
+          </section>
+
+          <section className="recode-card rounded-[2rem] p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-black uppercase tracking-[0.25em] text-zinc-500">
+                  Today Log
+                </p>
+
+                <h2 className="mt-3 text-3xl font-black tracking-tight">
+                  {selectedDate}
+                </h2>
+              </div>
+
+              <div className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs font-black text-zinc-400">
+                {todaysLogs.length} items
+              </div>
+            </div>
+
+            <div className="mt-6 grid gap-3">
+              {todaysLogs.length === 0 && (
+                <div className="rounded-3xl border border-white/5 bg-black/20 p-6 text-sm leading-6 text-zinc-500">
+                  No food logged yet. Add food manually or use Quick Save.
+                </div>
+              )}
+
+              {todaysLogs.map((log) => (
+                <div
+                  key={log.id}
+                  className="rounded-3xl border border-white/5 bg-black/20 p-4"
+                >
+                  <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-lg font-black text-white">
+                          {log.foodName}
+                        </p>
+
+                        <span className="rounded-full border border-white/10 px-2 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">
+                          {mealLabel(log.mealType)}
+                        </span>
+                      </div>
+
+                      <p className="mt-2 text-sm font-bold text-zinc-400">
+                        {log.protein}g protein · {log.calories} kcal
+                      </p>
+
+                      {(log.sweetDrink || log.junkFood || log.notes) && (
+                        <p className="mt-2 text-sm leading-6 text-zinc-500">
+                          {log.sweetDrink && "Sweet drink. "}
+                          {log.junkFood && "Junk food. "}
+                          {log.notes}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="grid gap-2 sm:grid-cols-3 md:min-w-72">
+                      <button
+                        onClick={() => editFood(log)}
+                        className="rounded-2xl border border-white/10 px-4 py-3 text-xs font-black text-zinc-300 hover:bg-white/[0.06]"
+                      >
+                        Edit
+                      </button>
+
+                      <button
+                        onClick={() => saveFoodToQuick(log)}
+                        className="rounded-2xl border border-emerald-400/25 bg-emerald-400/10 px-4 py-3 text-xs font-black text-emerald-200 hover:bg-emerald-400/15"
+                      >
+                        Save to Quick
+                      </button>
+
+                      <button
+                        onClick={() => deleteFood(log)}
+                        className="rounded-2xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-xs font-black text-red-200 hover:bg-red-400/15"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
-
-            <div className="mt-5 rounded-3xl border border-zinc-800 bg-zinc-950 p-5">
-              <p className="text-sm text-zinc-400">
-                {editingId ? "Editing Food Log" : "Food Check-in"}
-              </p>
-              <h2 className="mt-1 text-2xl font-bold">
-                {editingId ? "Update food" : "Manual log"}
-              </h2>
-
-              {editingId && (
-                <div className="mt-4 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-4 text-sm text-emerald-100">
-                  Editing mode is on. Press Cancel Edit to add a new food item instead.
-                </div>
-              )}
-
-              <div className="mt-5 grid gap-3 md:grid-cols-2">
-                <label className="block">
-                  <span className="text-xs text-zinc-500">Meal Type</span>
-                  <select
-                    value={form.mealType}
-                    onChange={(event) =>
-                      setForm({ ...form, mealType: event.target.value as MealType })
-                    }
-                    className="mt-1 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
-                  >
-                    <option value="breakfast">Breakfast</option>
-                    <option value="lunch">Lunch</option>
-                    <option value="dinner">Dinner</option>
-                    <option value="snack">Snack</option>
-                    <option value="drink">Drink</option>
-                    <option value="other">Other</option>
-                  </select>
-                </label>
-
-                <Input
-                  label={`Protein (g) / Goal ${goals.proteinGoal}g`}
-                  type="number"
-                  value={String(form.protein)}
-                  onChange={(value) => setForm({ ...form, protein: Number(value) })}
-                />
-
-                <Input
-                  label={`Calories / Goal ${goals.calorieGoal} kcal`}
-                  type="number"
-                  value={String(form.calories)}
-                  onChange={(value) => setForm({ ...form, calories: Number(value) })}
-                />
-
-                <Input
-                  label="Food Name"
-                  type="text"
-                  value={form.foodName}
-                  onChange={(value) => setForm({ ...form, foodName: value })}
-                />
-
-                <label className="flex items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={form.sweetDrink}
-                    onChange={(event) =>
-                      setForm({ ...form, sweetDrink: event.target.checked })
-                    }
-                  />
-                  Sweet drink
-                </label>
-
-                <label className="flex items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={form.junkFood}
-                    onChange={(event) =>
-                      setForm({ ...form, junkFood: event.target.checked })
-                    }
-                  />
-                  Junk food
-                </label>
-              </div>
-
-              <label className="mt-3 block">
-                <span className="text-xs text-zinc-500">Notes</span>
-                <textarea
-                  value={form.notes}
-                  onChange={(event) => setForm({ ...form, notes: event.target.value })}
-                  placeholder="Food details, estimate source, or anything to remember"
-                  className="mt-1 min-h-24 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
-                />
-              </label>
-
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <button
-                  onClick={saveFood}
-                  className="rounded-2xl bg-emerald-400 px-5 py-3 font-bold text-zinc-950 transition hover:bg-emerald-300"
-                >
-                  {editingId ? "Update Food + Sync" : "Save Food + Sync"}
-                </button>
-
-                <button
-                  onClick={cancelEdit}
-                  className="rounded-2xl border border-zinc-800 bg-zinc-900 px-5 py-3 font-bold text-zinc-300 transition hover:bg-zinc-800"
-                >
-                  {editingId ? "Cancel Edit" : "Clear Form"}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
-            <p className="text-sm text-zinc-400">Today Summary</p>
-            <h2 className="mt-1 text-2xl font-bold">{formatDateForMenu(selectedDate)}</h2>
-
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
-              <div className="rounded-3xl bg-zinc-950 p-5">
-                <p className="text-sm text-zinc-500">Protein</p>
-                <p className="mt-2 text-5xl font-black">
-                  {totalProtein}
-                  <span className="ml-1 text-xl text-zinc-500">g</span>
-                </p>
-
-                <div className="mt-4 h-3 overflow-hidden rounded-full bg-zinc-800">
-                  <div
-                    className="h-full rounded-full bg-emerald-400 transition-all"
-                    style={{ width: `${proteinPercent}%` }}
-                  />
-                </div>
-
-                <p className="mt-3 text-sm text-zinc-400">
-                  Score {proteinScore}/100 ยท{" "}
-                  {proteinLeft > 0 ? `${proteinLeft}g left` : "target reached"}
-                </p>
-              </div>
-
-              <div className="rounded-3xl bg-zinc-950 p-5">
-                <p className="text-sm text-zinc-500">Calories</p>
-                <p className="mt-2 text-5xl font-black">
-                  {totalCalories}
-                  <span className="ml-1 text-xl text-zinc-500">kcal</span>
-                </p>
-
-                <div className="mt-4 h-3 overflow-hidden rounded-full bg-zinc-800">
-                  <div
-                    className="h-full rounded-full bg-emerald-400 transition-all"
-                    style={{ width: `${caloriePercent}%` }}
-                  />
-                </div>
-
-                <p className="mt-3 text-sm text-zinc-400">
-                  Goal {goals.calorieGoal} kcal ยท{" "}
-                  {getCalorieText(totalCalories, goals.calorieGoal)}
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
-              <SmallStat label="Items" value={String(selectedLogs.length)} />
-              <SmallStat label="Sweet Drinks" value={String(sweetDrinkCount)} />
-              <SmallStat label="Junk Food" value={String(junkCount)} />
-            </div>
-
-            <div className="mt-4 rounded-3xl bg-zinc-950 p-5">
-              <p className="text-sm text-zinc-500">Food Coach Lite</p>
-              <p className="mt-3 text-sm leading-6 text-zinc-300">
-                {getFoodCoachMessage({
-                  protein: totalProtein,
-                  proteinGoal: goals.proteinGoal,
-                  calories: totalCalories,
-                  calorieGoal: goals.calorieGoal,
-                  sweetDrinkCount,
-                  junkCount,
-                })}
-              </p>
-            </div>
-
-            <div className="mt-5 rounded-3xl border border-zinc-800 bg-zinc-950 p-5">
-              <p className="text-sm text-zinc-400">Food History</p>
-              <h3 className="mt-1 text-2xl font-bold">Food logs</h3>
-
-              <div className="mt-5 grid gap-3">
-                {selectedLogs.length === 0 ? (
-                  <div className="rounded-2xl bg-zinc-900 p-5 text-sm text-zinc-500">
-                    No food log for this date
-                  </div>
-                ) : (
-                  selectedLogs
-                    .slice()
-                    .reverse()
-                    .map((log) => (
-                      <div
-                        key={log.id}
-                        className={
-                          editingId === log.id
-                            ? "rounded-2xl border border-emerald-400/50 bg-emerald-400/10 p-4 text-sm"
-                            : "rounded-2xl bg-zinc-900 p-4 text-sm"
-                        }
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="font-bold">{log.foodName}</p>
-                            <p className="mt-1 text-zinc-500">
-                              {getMealLabel(log.mealType)} ยท {log.protein}g protein ยท{" "}
-                              {log.calories} kcal
-                            </p>
-                            <p className="mt-1 text-zinc-500">
-                              {log.sweetDrink ? "Sweet drink" : "No sweet drink"} ยท{" "}
-                              {log.junkFood ? "Junk food" : "Not junk"}
-                            </p>
-                            {log.notes && (
-                              <p className="mt-2 text-xs leading-5 text-zinc-500">
-                                {log.notes}
-                              </p>
-                            )}
-                          </div>
-
-                          <div className="grid gap-2">
-                            <button
-                              onClick={() => startEditFood(log)}
-                              className="rounded-xl border border-emerald-400/40 px-3 py-2 text-xs font-bold text-emerald-300 hover:bg-emerald-400/10"
-                            >
-                              Edit
-                            </button>
-
-                            <button
-                              onClick={() => deleteFood(log.id)}
-                              className="rounded-xl border border-zinc-800 px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                )}
-              </div>
-            </div>
-          </div>
+          </section>
         </section>
       </section>
     </main>
   );
 }
 
-function Input({
-  label,
-  type,
-  value,
-  onChange,
-  step,
-}: {
-  label: string;
-  type: string;
-  value: string;
-  onChange: (value: string) => void;
-  step?: string;
-}) {
-  return (
-    <label className="block">
-      <span className="text-xs text-zinc-500">{label}</span>
-      <input
-        type={type}
-        step={step}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="mt-1 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
-      />
-    </label>
-  );
-}
+function ModeBadge({ mode }: { mode: SaveMode }) {
+  if (mode === "sync") {
+    return (
+      <div className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-4 py-2 text-sm font-black text-emerald-200">
+        ● Sync On
+      </div>
+    );
+  }
 
-function SmallStat({ label, value }: { label: string; value: string }) {
+  if (mode === "guest") {
+    return (
+      <div className="rounded-full border border-amber-400/25 bg-amber-400/10 px-4 py-2 text-sm font-black text-amber-200">
+        ● Guest
+      </div>
+    );
+  }
+
+  if (mode === "locked") {
+    return (
+      <div className="rounded-full border border-red-400/25 bg-red-400/10 px-4 py-2 text-sm font-black text-red-200">
+        ● Locked
+      </div>
+    );
+  }
+
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
-      <p className="text-xs text-zinc-500">{label}</p>
-      <p className="mt-2 text-2xl font-black">{value}</p>
+    <div className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-black text-zinc-400">
+      Checking
     </div>
   );
 }
 
+function SummaryCard({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <div className="recode-card rounded-[2rem] p-5">
+      <p className="text-xs font-black uppercase tracking-[0.22em] text-zinc-500">
+        {label}
+      </p>
+      <p className="mt-3 text-3xl font-black tracking-tight text-white">
+        {value}
+      </p>
+      <p className="mt-1 text-sm font-bold text-zinc-500">{detail}</p>
+    </div>
+  );
+}
 
+function CheckPill({
+  checked,
+  label,
+  onClick,
+}: {
+  checked: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={
+        checked
+          ? "rounded-2xl border border-emerald-400/25 bg-emerald-400/10 px-4 py-3 text-sm font-black text-emerald-200"
+          : "rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm font-black text-zinc-400"
+      }
+    >
+      {checked ? "✓ " : ""}
+      {label}
+    </button>
+  );
+}

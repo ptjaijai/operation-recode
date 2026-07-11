@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import AppNav from "./AppNav";
+import { createClient } from "../lib/supabase/client";
 
 type SnackLevel = "none" | "low" | "medium" | "high";
 type MoodLevel = "great" | "good" | "neutral" | "tired" | "bad";
@@ -9,8 +10,10 @@ type MoodLevel = "great" | "good" | "neutral" | "tired" | "bad";
 type Goals = {
   targetWeight: number;
   proteinGoal: number;
+  calorieGoal: number;
   waterGoal: number;
   sleepGoal: number;
+  workoutGoal: number;
 };
 
 type DailyLog = {
@@ -32,8 +35,10 @@ const storageKeys = {
 const defaultGoals: Goals = {
   targetWeight: 60,
   proteinGoal: 120,
+  calorieGoal: 1800,
   waterGoal: 2,
   sleepGoal: 7,
+  workoutGoal: 30,
 };
 
 function getLocalDateString(date = new Date()) {
@@ -46,7 +51,18 @@ function getLocalDateString(date = new Date()) {
 
 const today = getLocalDateString();
 
-function loadGoals(): Goals {
+function toNumber(value: unknown, fallback: number) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  return fallback;
+}
+
+function loadLocalGoals(): Goals {
   const saved = localStorage.getItem(storageKeys.goals);
 
   if (!saved) return defaultGoals;
@@ -55,22 +71,12 @@ function loadGoals(): Goals {
     const parsed = JSON.parse(saved) as Partial<Goals>;
 
     return {
-      targetWeight:
-        typeof parsed.targetWeight === "number"
-          ? parsed.targetWeight
-          : defaultGoals.targetWeight,
-      proteinGoal:
-        typeof parsed.proteinGoal === "number"
-          ? parsed.proteinGoal
-          : defaultGoals.proteinGoal,
-      waterGoal:
-        typeof parsed.waterGoal === "number"
-          ? parsed.waterGoal
-          : defaultGoals.waterGoal,
-      sleepGoal:
-        typeof parsed.sleepGoal === "number"
-          ? parsed.sleepGoal
-          : defaultGoals.sleepGoal,
+      targetWeight: toNumber(parsed.targetWeight, defaultGoals.targetWeight),
+      proteinGoal: toNumber(parsed.proteinGoal, defaultGoals.proteinGoal),
+      calorieGoal: toNumber(parsed.calorieGoal, defaultGoals.calorieGoal),
+      waterGoal: toNumber(parsed.waterGoal, defaultGoals.waterGoal),
+      sleepGoal: toNumber(parsed.sleepGoal, defaultGoals.sleepGoal),
+      workoutGoal: toNumber(parsed.workoutGoal, defaultGoals.workoutGoal),
     };
   } catch {
     return defaultGoals;
@@ -175,6 +181,47 @@ function normalizeLog(raw: Record<string, unknown>): DailyLog {
   };
 }
 
+function databaseToDailyLog(row: Record<string, unknown>): DailyLog {
+  return {
+    id: typeof row.id === "string" ? row.id : crypto.randomUUID(),
+    date: typeof row.date === "string" ? row.date : today,
+    weight: toNumber(row.weight, 0),
+    sleep: toNumber(row.sleep, 0),
+    water: toNumber(row.water, 0),
+    snackLevel: normalizeSnackLevel(row.snack_level),
+    mood: normalizeMood(row.mood),
+    notes: typeof row.notes === "string" ? row.notes : "",
+  };
+}
+
+function dailyLogToDatabase(log: DailyLog, userId: string) {
+  return {
+    user_id: userId,
+    date: log.date,
+    weight: log.weight,
+    sleep: log.sleep,
+    water: log.water,
+    snack_level: log.snackLevel,
+    mood: log.mood,
+    notes: log.notes,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function mergeLogsByDate(localLogs: DailyLog[], cloudLogs: DailyLog[]) {
+  const map = new Map<string, DailyLog>();
+
+  cloudLogs.forEach((log) => {
+    map.set(log.date, log);
+  });
+
+  localLogs.forEach((log) => {
+    map.set(log.date, log);
+  });
+
+  return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
+}
+
 function getSleepScore(sleep: number, sleepGoal: number) {
   if (sleep >= sleepGoal) return 100;
   if (sleep >= sleepGoal - 1) return 75;
@@ -261,23 +308,87 @@ export default function DashboardPage() {
   const [goals, setGoals] = useState<Goals>(defaultGoals);
   const [selectedDate, setSelectedDate] = useState(today);
   const [form, setForm] = useState<DailyLog>(() => createEmptyLog(today));
+  const [userId, setUserId] = useState("");
+  const [syncStatus, setSyncStatus] = useState("Loading local data...");
 
   useEffect(() => {
-    setGoals(loadGoals());
+    async function loadData() {
+      const localGoals = loadLocalGoals();
+      setGoals(localGoals);
 
-    const saved = localStorage.getItem(storageKeys.daily);
+      const saved = localStorage.getItem(storageKeys.daily);
+      let localLogs: DailyLog[] = [];
 
-    if (!saved) return;
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
 
-    try {
-      const parsed = JSON.parse(saved);
-
-      if (Array.isArray(parsed)) {
-        setLogs(parsed.map((item) => normalizeLog(item)));
+          if (Array.isArray(parsed)) {
+            localLogs = parsed.map((item) => normalizeLog(item));
+            setLogs(localLogs);
+          }
+        } catch {
+          localLogs = [];
+          setLogs([]);
+        }
       }
-    } catch {
-      setLogs([]);
+
+      try {
+        const supabase = createClient();
+        const { data: userData } = await supabase.auth.getUser();
+
+        if (!userData.user) {
+          setSyncStatus("Not logged in. Daily logs are local only.");
+          return;
+        }
+
+        setUserId(userData.user.id);
+        setSyncStatus("Loading cloud daily logs...");
+
+        const { data, error } = await supabase
+          .from("daily_logs")
+          .select("*")
+          .eq("user_id", userData.user.id)
+          .order("date", { ascending: true });
+
+        if (error) {
+          setSyncStatus(`Cloud load failed: ${error.message}`);
+          return;
+        }
+
+        const cloudLogs = (data ?? []).map((item) =>
+          databaseToDailyLog(item as Record<string, unknown>)
+        );
+
+        const mergedLogs = mergeLogsByDate(localLogs, cloudLogs);
+
+        setLogs(mergedLogs);
+        localStorage.setItem(storageKeys.daily, JSON.stringify(mergedLogs));
+
+        if (mergedLogs.length > 0) {
+          const rows = mergedLogs.map((log) =>
+            dailyLogToDatabase(log, userData.user!.id)
+          );
+
+          const { error: upsertError } = await supabase
+            .from("daily_logs")
+            .upsert(rows, { onConflict: "user_id,date" });
+
+          if (upsertError) {
+            setSyncStatus(`Cloud sync failed: ${upsertError.message}`);
+            return;
+          }
+        }
+
+        setSyncStatus("Daily logs synced with Supabase.");
+      } catch (error) {
+        setSyncStatus(
+          error instanceof Error ? error.message : "Could not connect to Supabase."
+        );
+      }
     }
+
+    loadData();
   }, []);
 
   useEffect(() => {
@@ -331,9 +442,8 @@ export default function DashboardPage() {
       : 0;
 
   const selectedScore = getDailyScore(selectedLog, goals);
-  const latestScore = sortedLogs[0] ? getDailyScore(sortedLogs[0], goals) : 0;
 
-  function saveLog() {
+  async function saveLog() {
     const newLog: DailyLog = {
       ...form,
       id: selectedLog?.id ?? crypto.randomUUID(),
@@ -345,17 +455,79 @@ export default function DashboardPage() {
       mood: form.mood || "neutral",
     };
 
-    setLogs((current) => {
-      const withoutSameDate = current.filter((log) => log.date !== selectedDate);
-      return [...withoutSameDate, newLog].sort((a, b) => a.date.localeCompare(b.date));
-    });
+    const nextLogs = [
+      ...logs.filter((log) => log.date !== selectedDate),
+      newLog,
+    ].sort((a, b) => a.date.localeCompare(b.date));
+
+    setLogs(nextLogs);
+    localStorage.setItem(storageKeys.daily, JSON.stringify(nextLogs));
+
+    if (!userId) {
+      setSyncStatus("Saved locally. Login to sync this daily log.");
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+
+      const { error } = await supabase
+        .from("daily_logs")
+        .upsert(dailyLogToDatabase(newLog, userId), {
+          onConflict: "user_id,date",
+        });
+
+      if (error) {
+        setSyncStatus(`Saved locally, cloud sync failed: ${error.message}`);
+        return;
+      }
+
+      setSyncStatus("Daily log saved and synced.");
+    } catch (error) {
+      setSyncStatus(
+        error instanceof Error
+          ? `Saved locally, cloud sync failed: ${error.message}`
+          : "Saved locally, cloud sync failed."
+      );
+    }
   }
 
-  function deleteLog(date: string) {
-    setLogs((current) => current.filter((log) => log.date !== date));
+  async function deleteLog(date: string) {
+    const nextLogs = logs.filter((log) => log.date !== date);
+
+    setLogs(nextLogs);
+    localStorage.setItem(storageKeys.daily, JSON.stringify(nextLogs));
 
     if (date === selectedDate) {
       setForm(createEmptyLog(selectedDate));
+    }
+
+    if (!userId) {
+      setSyncStatus("Deleted locally. Login to sync deletions.");
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+
+      const { error } = await supabase
+        .from("daily_logs")
+        .delete()
+        .eq("user_id", userId)
+        .eq("date", date);
+
+      if (error) {
+        setSyncStatus(`Deleted locally, cloud delete failed: ${error.message}`);
+        return;
+      }
+
+      setSyncStatus("Daily log deleted from cloud.");
+    } catch (error) {
+      setSyncStatus(
+        error instanceof Error
+          ? `Deleted locally, cloud delete failed: ${error.message}`
+          : "Deleted locally, cloud delete failed."
+      );
     }
   }
 
@@ -372,14 +544,18 @@ export default function DashboardPage() {
             <h1 className="mt-2 text-3xl font-black tracking-tight md:text-6xl">
               Daily Dashboard.
               <br />
-              Rebuild the system.
+              Sync the baseline.
             </h1>
           </div>
 
           <div className="rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-zinc-300">
-            Dashboard / v1.5
+            Dashboard / v2.0
           </div>
         </nav>
+
+        <section className="mb-5 rounded-3xl border border-emerald-400/30 bg-emerald-400/10 p-5 text-sm text-emerald-100">
+          {syncStatus}
+        </section>
 
         <section className="mb-5 grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
           <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-6 md:p-8">
@@ -563,7 +739,7 @@ export default function DashboardPage() {
               onClick={saveLog}
               className="mt-4 w-full rounded-2xl bg-emerald-400 px-5 py-3 font-bold text-zinc-950 transition hover:bg-emerald-300"
             >
-              {selectedLog ? "Update Check-in" : "Save Check-in"}
+              {selectedLog ? "Update Check-in + Sync" : "Save Check-in + Sync"}
             </button>
           </div>
 

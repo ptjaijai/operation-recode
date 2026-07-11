@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import AppNav from "../AppNav";
+import { createClient } from "../../lib/supabase/client";
 
 type MealType = "breakfast" | "lunch" | "dinner" | "snack" | "drink" | "other";
 
@@ -11,6 +12,7 @@ type FoodLog = {
   mealType: MealType;
   foodName: string;
   protein: number;
+  calories: number;
   sweetDrink: boolean;
   junkFood: boolean;
   notes: string;
@@ -19,14 +21,16 @@ type FoodLog = {
 type Goals = {
   targetWeight: number;
   proteinGoal: number;
+  calorieGoal: number;
   waterGoal: number;
   sleepGoal: number;
-  workoutGoal?: number;
+  workoutGoal: number;
 };
 
 type ProteinPreset = {
   name: string;
   protein: number;
+  calories: number;
   mealType: MealType;
 };
 
@@ -38,20 +42,21 @@ const storageKeys = {
 const defaultGoals: Goals = {
   targetWeight: 60,
   proteinGoal: 120,
+  calorieGoal: 1800,
   waterGoal: 2,
   sleepGoal: 7,
   workoutGoal: 30,
 };
 
 const proteinPresets: ProteinPreset[] = [
-  { name: "Whey 1 scoop", protein: 25, mealType: "drink" },
-  { name: "Eggs 2 pcs", protein: 12, mealType: "breakfast" },
-  { name: "Chicken breast", protein: 35, mealType: "lunch" },
-  { name: "Tuna can", protein: 25, mealType: "lunch" },
-  { name: "Greek yogurt", protein: 15, mealType: "snack" },
-  { name: "Lean pork", protein: 30, mealType: "dinner" },
-  { name: "Milk", protein: 8, mealType: "drink" },
-  { name: "Grilled chicken", protein: 30, mealType: "lunch" },
+  { name: "Whey 1 scoop", protein: 25, calories: 120, mealType: "drink" },
+  { name: "Eggs 2 pcs", protein: 12, calories: 140, mealType: "breakfast" },
+  { name: "Chicken breast", protein: 35, calories: 180, mealType: "lunch" },
+  { name: "Tuna can", protein: 25, calories: 120, mealType: "lunch" },
+  { name: "Greek yogurt", protein: 15, calories: 120, mealType: "snack" },
+  { name: "Lean pork", protein: 30, calories: 250, mealType: "dinner" },
+  { name: "Milk", protein: 8, calories: 130, mealType: "drink" },
+  { name: "Grilled chicken", protein: 30, calories: 220, mealType: "lunch" },
 ];
 
 function getLocalDateString(date = new Date()) {
@@ -64,6 +69,25 @@ function getLocalDateString(date = new Date()) {
 
 const today = getLocalDateString();
 
+function isUuid(value: unknown) {
+  if (typeof value !== "string") return false;
+
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value
+  );
+}
+
+function toNumber(value: unknown, fallback: number) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  return fallback;
+}
+
 function loadGoals(): Goals {
   const saved = localStorage.getItem(storageKeys.goals);
 
@@ -73,26 +97,12 @@ function loadGoals(): Goals {
     const parsed = JSON.parse(saved) as Partial<Goals>;
 
     return {
-      targetWeight:
-        typeof parsed.targetWeight === "number"
-          ? parsed.targetWeight
-          : defaultGoals.targetWeight,
-      proteinGoal:
-        typeof parsed.proteinGoal === "number"
-          ? parsed.proteinGoal
-          : defaultGoals.proteinGoal,
-      waterGoal:
-        typeof parsed.waterGoal === "number"
-          ? parsed.waterGoal
-          : defaultGoals.waterGoal,
-      sleepGoal:
-        typeof parsed.sleepGoal === "number"
-          ? parsed.sleepGoal
-          : defaultGoals.sleepGoal,
-      workoutGoal:
-        typeof parsed.workoutGoal === "number"
-          ? parsed.workoutGoal
-          : defaultGoals.workoutGoal,
+      targetWeight: toNumber(parsed.targetWeight, defaultGoals.targetWeight),
+      proteinGoal: toNumber(parsed.proteinGoal, defaultGoals.proteinGoal),
+      calorieGoal: toNumber(parsed.calorieGoal, defaultGoals.calorieGoal),
+      waterGoal: toNumber(parsed.waterGoal, defaultGoals.waterGoal),
+      sleepGoal: toNumber(parsed.sleepGoal, defaultGoals.sleepGoal),
+      workoutGoal: toNumber(parsed.workoutGoal, defaultGoals.workoutGoal),
     };
   } catch {
     return defaultGoals;
@@ -128,6 +138,7 @@ function createEmptyForm(date: string): FoodLog {
     mealType: "lunch",
     foodName: "",
     protein: 0,
+    calories: 0,
     sweetDrink: false,
     junkFood: false,
     notes: "",
@@ -151,7 +162,7 @@ function normalizeMealType(value: unknown): MealType {
 
 function normalizeLog(raw: Record<string, unknown>): FoodLog {
   return {
-    id: typeof raw.id === "string" ? raw.id : crypto.randomUUID(),
+    id: isUuid(raw.id) ? String(raw.id) : crypto.randomUUID(),
     date: typeof raw.date === "string" ? raw.date : today,
     mealType: normalizeMealType(raw.mealType),
     foodName:
@@ -170,6 +181,14 @@ function normalizeLog(raw: Record<string, unknown>): FoodLog {
         : typeof raw.proteinEstimate === "number"
         ? raw.proteinEstimate
         : 0,
+    calories:
+      typeof raw.calories === "number"
+        ? raw.calories
+        : typeof raw.kcal === "number"
+        ? raw.kcal
+        : typeof raw.calorieEstimate === "number"
+        ? raw.calorieEstimate
+        : 0,
     sweetDrink:
       typeof raw.sweetDrink === "boolean"
         ? raw.sweetDrink
@@ -184,6 +203,50 @@ function normalizeLog(raw: Record<string, unknown>): FoodLog {
         : false,
     notes: typeof raw.notes === "string" ? raw.notes : "",
   };
+}
+
+function databaseToFoodLog(row: Record<string, unknown>): FoodLog {
+  return {
+    id: isUuid(row.id) ? String(row.id) : crypto.randomUUID(),
+    date: typeof row.date === "string" ? row.date : today,
+    mealType: normalizeMealType(row.meal_type),
+    foodName: typeof row.food_name === "string" ? row.food_name : "",
+    protein: toNumber(row.protein, 0),
+    calories: toNumber(row.calories, 0),
+    sweetDrink: row.sweet_drink === true,
+    junkFood: row.junk_food === true,
+    notes: typeof row.notes === "string" ? row.notes : "",
+  };
+}
+
+function foodLogToDatabase(log: FoodLog, userId: string) {
+  return {
+    id: log.id,
+    user_id: userId,
+    date: log.date,
+    meal_type: log.mealType,
+    food_name: log.foodName,
+    protein: log.protein,
+    calories: Math.round(log.calories),
+    sweet_drink: log.sweetDrink,
+    junk_food: log.junkFood,
+    notes: log.notes,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function mergeLogsById(localLogs: FoodLog[], cloudLogs: FoodLog[]) {
+  const map = new Map<string, FoodLog>();
+
+  cloudLogs.forEach((log) => {
+    map.set(log.id, log);
+  });
+
+  localLogs.forEach((log) => {
+    map.set(log.id, log);
+  });
+
+  return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
 }
 
 function getMealLabel(type: MealType) {
@@ -204,21 +267,40 @@ function getProteinScore(protein: number, proteinGoal: number) {
   return 0;
 }
 
+function getCalorieText(totalCalories: number, calorieGoal: number) {
+  const diff = calorieGoal - totalCalories;
+
+  if (totalCalories === 0) return "No calories logged yet.";
+  if (diff > 0) return `${diff} kcal left`;
+  if (diff === 0) return "exactly on target";
+
+  return `${Math.abs(diff)} kcal over`;
+}
+
 function getFoodCoachMessage({
   protein,
   proteinGoal,
+  calories,
+  calorieGoal,
   sweetDrinkCount,
   junkCount,
 }: {
   protein: number;
   proteinGoal: number;
+  calories: number;
+  calorieGoal: number;
   sweetDrinkCount: number;
   junkCount: number;
 }) {
   const proteinLeft = Math.max(proteinGoal - protein, 0);
+  const caloriesOver = Math.max(calories - calorieGoal, 0);
 
-  if (protein === 0) {
-    return "No food log yet. Add your first meal and estimate protein roughly.";
+  if (protein === 0 && calories === 0) {
+    return "No food log yet. Add your first meal and estimate protein/calories roughly.";
+  }
+
+  if (caloriesOver > 0) {
+    return `Calories are over by about ${caloriesOver} kcal. Do not starve now, just keep the next meal clean.`;
   }
 
   if (protein < proteinGoal * 0.65) {
@@ -245,23 +327,86 @@ export default function FoodPage() {
   const [goals, setGoals] = useState<Goals>(defaultGoals);
   const [selectedDate, setSelectedDate] = useState(today);
   const [form, setForm] = useState<FoodLog>(() => createEmptyForm(today));
+  const [userId, setUserId] = useState("");
+  const [syncStatus, setSyncStatus] = useState("Loading local food data...");
 
   useEffect(() => {
-    setGoals(loadGoals());
+    async function loadFoodData() {
+      setGoals(loadGoals());
 
-    const saved = localStorage.getItem(storageKeys.food);
+      const saved = localStorage.getItem(storageKeys.food);
+      let localLogs: FoodLog[] = [];
 
-    if (!saved) return;
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
 
-    try {
-      const parsed = JSON.parse(saved);
-
-      if (Array.isArray(parsed)) {
-        setLogs(parsed.map((item) => normalizeLog(item)));
+          if (Array.isArray(parsed)) {
+            localLogs = parsed.map((item) => normalizeLog(item));
+            setLogs(localLogs);
+          }
+        } catch {
+          localLogs = [];
+          setLogs([]);
+        }
       }
-    } catch {
-      setLogs([]);
+
+      try {
+        const supabase = createClient();
+        const { data: userData } = await supabase.auth.getUser();
+
+        if (!userData.user) {
+          setSyncStatus("Not logged in. Food logs are local only.");
+          return;
+        }
+
+        setUserId(userData.user.id);
+        setSyncStatus("Loading cloud food logs...");
+
+        const { data, error } = await supabase
+          .from("food_logs")
+          .select("*")
+          .eq("user_id", userData.user.id)
+          .order("date", { ascending: true });
+
+        if (error) {
+          setSyncStatus(`Cloud load failed: ${error.message}`);
+          return;
+        }
+
+        const cloudLogs = (data ?? []).map((item) =>
+          databaseToFoodLog(item as Record<string, unknown>)
+        );
+
+        const mergedLogs = mergeLogsById(localLogs, cloudLogs);
+
+        setLogs(mergedLogs);
+        localStorage.setItem(storageKeys.food, JSON.stringify(mergedLogs));
+
+        if (mergedLogs.length > 0) {
+          const rows = mergedLogs.map((log) =>
+            foodLogToDatabase(log, userData.user!.id)
+          );
+
+          const { error: upsertError } = await supabase
+            .from("food_logs")
+            .upsert(rows, { onConflict: "id" });
+
+          if (upsertError) {
+            setSyncStatus(`Cloud sync failed: ${upsertError.message}`);
+            return;
+          }
+        }
+
+        setSyncStatus("Food logs synced with Supabase.");
+      } catch (error) {
+        setSyncStatus(
+          error instanceof Error ? error.message : "Could not connect to Supabase."
+        );
+      }
     }
+
+    loadFoodData();
   }, []);
 
   useEffect(() => {
@@ -292,12 +437,45 @@ export default function FoodPage() {
   }, [logs, selectedDate]);
 
   const totalProtein = selectedLogs.reduce((sum, log) => sum + log.protein, 0);
+  const totalCalories = selectedLogs.reduce((sum, log) => sum + log.calories, 0);
+
   const proteinLeft = Math.max(goals.proteinGoal - totalProtein, 0);
+  const calorieLeft = goals.calorieGoal - totalCalories;
+
   const proteinScore = getProteinScore(totalProtein, goals.proteinGoal);
   const proteinPercent = Math.min((totalProtein / goals.proteinGoal) * 100, 100);
+  const caloriePercent = Math.min((totalCalories / goals.calorieGoal) * 100, 100);
 
   const sweetDrinkCount = selectedLogs.filter((log) => log.sweetDrink).length;
   const junkCount = selectedLogs.filter((log) => log.junkFood).length;
+
+  async function saveLogToCloud(log: FoodLog) {
+    if (!userId) {
+      setSyncStatus("Saved locally. Login to sync food logs.");
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+
+      const { error } = await supabase
+        .from("food_logs")
+        .upsert(foodLogToDatabase(log, userId), { onConflict: "id" });
+
+      if (error) {
+        setSyncStatus(`Saved locally, cloud sync failed: ${error.message}`);
+        return;
+      }
+
+      setSyncStatus("Food log saved and synced.");
+    } catch (error) {
+      setSyncStatus(
+        error instanceof Error
+          ? `Saved locally, cloud sync failed: ${error.message}`
+          : "Saved locally, cloud sync failed."
+      );
+    }
+  }
 
   function applyPreset(preset: ProteinPreset) {
     setForm({
@@ -305,27 +483,33 @@ export default function FoodPage() {
       mealType: preset.mealType,
       foodName: preset.name,
       protein: preset.protein,
-      sweetDrink: preset.mealType === "drink" ? form.sweetDrink : form.sweetDrink,
+      calories: preset.calories,
+      sweetDrink: false,
       junkFood: false,
     });
   }
 
-  function quickSavePreset(preset: ProteinPreset) {
+  async function quickSavePreset(preset: ProteinPreset) {
     const newLog: FoodLog = {
       id: crypto.randomUUID(),
       date: selectedDate,
       mealType: preset.mealType,
       foodName: preset.name,
       protein: preset.protein,
+      calories: preset.calories,
       sweetDrink: false,
       junkFood: false,
       notes: "Quick add",
     };
 
-    setLogs((current) => [...current, newLog]);
+    const nextLogs = [...logs, newLog];
+    setLogs(nextLogs);
+    localStorage.setItem(storageKeys.food, JSON.stringify(nextLogs));
+
+    await saveLogToCloud(newLog);
   }
 
-  function saveFood() {
+  async function saveFood() {
     if (!form.foodName.trim()) {
       alert("ใส่ชื่ออาหารก่อน");
       return;
@@ -337,14 +521,50 @@ export default function FoodPage() {
       date: selectedDate,
       foodName: form.foodName.trim(),
       protein: Number(form.protein),
+      calories: Number(form.calories),
     };
 
-    setLogs((current) => [...current, newLog]);
+    const nextLogs = [...logs, newLog];
+    setLogs(nextLogs);
+    localStorage.setItem(storageKeys.food, JSON.stringify(nextLogs));
     setForm(createEmptyForm(selectedDate));
+
+    await saveLogToCloud(newLog);
   }
 
-  function deleteFood(id: string) {
-    setLogs((current) => current.filter((log) => log.id !== id));
+  async function deleteFood(id: string) {
+    const nextLogs = logs.filter((log) => log.id !== id);
+
+    setLogs(nextLogs);
+    localStorage.setItem(storageKeys.food, JSON.stringify(nextLogs));
+
+    if (!userId) {
+      setSyncStatus("Deleted locally. Login to sync deletions.");
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+
+      const { error } = await supabase
+        .from("food_logs")
+        .delete()
+        .eq("user_id", userId)
+        .eq("id", id);
+
+      if (error) {
+        setSyncStatus(`Deleted locally, cloud delete failed: ${error.message}`);
+        return;
+      }
+
+      setSyncStatus("Food log deleted from cloud.");
+    } catch (error) {
+      setSyncStatus(
+        error instanceof Error
+          ? `Deleted locally, cloud delete failed: ${error.message}`
+          : "Deleted locally, cloud delete failed."
+      );
+    }
   }
 
   return (
@@ -360,14 +580,18 @@ export default function FoodPage() {
             <h1 className="mt-2 text-3xl font-black tracking-tight md:text-6xl">
               Food Tracker.
               <br />
-              Protein first.
+              Protein + calories.
             </h1>
           </div>
 
           <div className="rounded-full border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-zinc-300">
-            Food / v1.4
+            Food / v2.0
           </div>
         </nav>
+
+        <section className="mb-5 rounded-3xl border border-emerald-400/30 bg-emerald-400/10 p-5 text-sm text-emerald-100">
+          {syncStatus}
+        </section>
 
         <section className="mb-5 rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 md:p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -436,7 +660,8 @@ export default function FoodPage() {
                     <div>
                       <p className="font-bold">{preset.name}</p>
                       <p className="mt-1 text-sm text-zinc-500">
-                        {preset.protein}g protein · {getMealLabel(preset.mealType)}
+                        {preset.protein}g protein · {preset.calories} kcal ·{" "}
+                        {getMealLabel(preset.mealType)}
                       </p>
                     </div>
                   </div>
@@ -490,14 +715,19 @@ export default function FoodPage() {
                   onChange={(value) => setForm({ ...form, protein: Number(value) })}
                 />
 
-                <div className="md:col-span-2">
-                  <Input
-                    label="Food Name"
-                    type="text"
-                    value={form.foodName}
-                    onChange={(value) => setForm({ ...form, foodName: value })}
-                  />
-                </div>
+                <Input
+                  label={`Calories / Goal ${goals.calorieGoal} kcal`}
+                  type="number"
+                  value={String(form.calories)}
+                  onChange={(value) => setForm({ ...form, calories: Number(value) })}
+                />
+
+                <Input
+                  label="Food Name"
+                  type="text"
+                  value={form.foodName}
+                  onChange={(value) => setForm({ ...form, foodName: value })}
+                />
 
                 <label className="flex items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm">
                   <input
@@ -536,7 +766,7 @@ export default function FoodPage() {
                 onClick={saveFood}
                 className="mt-4 w-full rounded-2xl bg-emerald-400 px-5 py-3 font-bold text-zinc-950 transition hover:bg-emerald-300"
               >
-                Save Food
+                Save Food + Sync
               </button>
             </div>
           </div>
@@ -545,36 +775,46 @@ export default function FoodPage() {
             <p className="text-sm text-zinc-400">Today Summary</p>
             <h2 className="mt-1 text-2xl font-bold">{formatDateForMenu(selectedDate)}</h2>
 
-            <div className="mt-5 rounded-3xl bg-zinc-950 p-5">
-              <div className="flex flex-wrap items-end justify-between gap-4">
-                <div>
-                  <p className="text-sm text-zinc-500">Protein</p>
-                  <p className="mt-2 text-5xl font-black">
-                    {totalProtein}
-                    <span className="ml-1 text-xl text-zinc-500">g</span>
-                  </p>
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <div className="rounded-3xl bg-zinc-950 p-5">
+                <p className="text-sm text-zinc-500">Protein</p>
+                <p className="mt-2 text-5xl font-black">
+                  {totalProtein}
+                  <span className="ml-1 text-xl text-zinc-500">g</span>
+                </p>
+
+                <div className="mt-4 h-3 overflow-hidden rounded-full bg-zinc-800">
+                  <div
+                    className="h-full rounded-full bg-emerald-400 transition-all"
+                    style={{ width: `${proteinPercent}%` }}
+                  />
                 </div>
 
-                <div className="text-right">
-                  <p className="text-sm text-zinc-500">Goal</p>
-                  <p className="mt-2 text-4xl font-black">
-                    {goals.proteinGoal}
-                    <span className="text-lg text-zinc-500">g</span>
-                  </p>
+                <p className="mt-3 text-sm text-zinc-400">
+                  Score {proteinScore}/100 ·{" "}
+                  {proteinLeft > 0 ? `${proteinLeft}g left` : "target reached"}
+                </p>
+              </div>
+
+              <div className="rounded-3xl bg-zinc-950 p-5">
+                <p className="text-sm text-zinc-500">Calories</p>
+                <p className="mt-2 text-5xl font-black">
+                  {totalCalories}
+                  <span className="ml-1 text-xl text-zinc-500">kcal</span>
+                </p>
+
+                <div className="mt-4 h-3 overflow-hidden rounded-full bg-zinc-800">
+                  <div
+                    className="h-full rounded-full bg-emerald-400 transition-all"
+                    style={{ width: `${caloriePercent}%` }}
+                  />
                 </div>
-              </div>
 
-              <div className="mt-4 h-3 overflow-hidden rounded-full bg-zinc-800">
-                <div
-                  className="h-full rounded-full bg-emerald-400 transition-all"
-                  style={{ width: `${proteinPercent}%` }}
-                />
+                <p className="mt-3 text-sm text-zinc-400">
+                  Goal {goals.calorieGoal} kcal ·{" "}
+                  {getCalorieText(totalCalories, goals.calorieGoal)}
+                </p>
               </div>
-
-              <p className="mt-3 text-sm text-zinc-400">
-                Score {proteinScore}/100 ·{" "}
-                {proteinLeft > 0 ? `${proteinLeft}g left` : "target reached"}
-              </p>
             </div>
 
             <div className="mt-4 grid gap-3 md:grid-cols-3">
@@ -589,6 +829,8 @@ export default function FoodPage() {
                 {getFoodCoachMessage({
                   protein: totalProtein,
                   proteinGoal: goals.proteinGoal,
+                  calories: totalCalories,
+                  calorieGoal: goals.calorieGoal,
                   sweetDrinkCount,
                   junkCount,
                 })}
@@ -617,7 +859,8 @@ export default function FoodPage() {
                           <div>
                             <p className="font-bold">{log.foodName}</p>
                             <p className="mt-1 text-zinc-500">
-                              {getMealLabel(log.mealType)} · {log.protein}g protein
+                              {getMealLabel(log.mealType)} · {log.protein}g protein ·{" "}
+                              {log.calories} kcal
                             </p>
                             <p className="mt-1 text-zinc-500">
                               {log.sweetDrink ? "Sweet drink" : "No sweet drink"} ·{" "}

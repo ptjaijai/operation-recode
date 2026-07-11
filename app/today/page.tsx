@@ -433,6 +433,27 @@ function createDailyForm(log?: DailyLog): DailyLog {
   };
 }
 
+function getCurrentWeight(dailyLogs: DailyLog[]) {
+  const todayWeight = dailyLogs.find((log) => log.date === today && log.weight > 0);
+  if (todayWeight) return todayWeight.weight;
+
+  const latest = dailyLogs
+    .filter((log) => log.weight > 0)
+    .sort((a, b) => b.date.localeCompare(a.date))[0];
+
+  return latest?.weight ?? 70;
+}
+
+function getWorkoutLabel(type: WorkoutType) {
+  if (type === "badminton") return "Badminton";
+  if (type === "home-workout") return "Home";
+  if (type === "walking") return "Walk";
+  if (type === "running") return "Run";
+  if (type === "swimming") return "Swim";
+  if (type === "stretching") return "Stretch";
+  return "Other";
+}
+
 export default function TodayPage() {
   const [goals, setGoals] = useState<Goals>(defaultGoals);
   const [dailyLogs, setDailyLogs] = useState<DailyLog[]>([]);
@@ -758,338 +779,431 @@ export default function TodayPage() {
   }
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-white">
-      <section className="mx-auto min-h-screen w-full max-w-4xl px-5 py-6 md:px-8">
+    <main className="min-h-screen text-white">
+      <section className="recode-shell mx-auto min-h-screen w-full max-w-7xl px-5 py-6 md:px-8">
         <AppNav />
 
-        <nav className="mb-6">
-          <p className="text-xs uppercase tracking-[0.35em] text-emerald-400">
-            Operation: Recode
-          </p>
-          <h1 className="mt-2 text-4xl font-black tracking-tight">
-            Today.
-            <br />
-            {getStatusText(score)}
-          </h1>
-        </nav>
-
-        <section className="rounded-[2rem] border border-emerald-400/30 bg-emerald-400/10 p-5">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-sm text-emerald-300">{syncStatus}</p>
-              <p className="mt-2 text-7xl font-black">
-                {score}
-                <span className="text-2xl text-zinc-400"> / 100</span>
-              </p>
-            </div>
-
-            <div className="rounded-full bg-emerald-400 px-3 py-1 text-xs font-black text-zinc-950">
-              TODAY
-            </div>
+        <section className="mb-8 flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
+          <div>
+            <p className="recode-kicker">Operation: Recode</p>
+            <h1 className="mt-3 text-5xl font-black tracking-tight md:text-7xl">
+              Today
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400 md:text-base">
+              Your daily command center for check-in, food, workout, and recovery.
+            </p>
           </div>
 
-          <div className="mt-5 h-3 overflow-hidden rounded-full bg-zinc-800">
-            <div
-              className="h-full rounded-full bg-emerald-400 transition-all"
-              style={{ width: `${score}%` }}
-            />
-          </div>
-
-          <p className="mt-5 text-sm leading-6 text-zinc-200">{coachLine}</p>
-        </section>
-
-        <section className="mt-5 rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5">
-          <p className="text-sm text-zinc-400">Daily Check-in</p>
-          <h2 className="mt-1 text-2xl font-black">Baseline today</h2>
-
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <Input
-              label="Weight kg"
-              type="number"
-              step="0.1"
-              value={String(dailyForm.weight)}
-              onChange={(value) =>
-                setDailyForm({ ...dailyForm, weight: Number(value) })
-              }
-            />
-
-            <Input
-              label="Sleep hours"
-              type="number"
-              step="0.5"
-              value={String(dailyForm.sleep)}
-              onChange={(value) =>
-                setDailyForm({ ...dailyForm, sleep: Number(value) })
-              }
-            />
-
-            <Input
-              label="Water liters"
-              type="number"
-              step="0.25"
-              value={String(dailyForm.water)}
-              onChange={(value) =>
-                setDailyForm({ ...dailyForm, water: Number(value) })
-              }
-            />
-
-            <label className="block">
-              <span className="text-xs text-zinc-500">Mood</span>
-              <select
-                value={dailyForm.mood}
-                onChange={(event) =>
-                  setDailyForm({ ...dailyForm, mood: event.target.value })
-                }
-                className="mt-1 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
-              >
-                <option value="great">Great</option>
-                <option value="good">Good</option>
-                <option value="neutral">Neutral</option>
-                <option value="tired">Tired</option>
-                <option value="bad">Bad</option>
-              </select>
-            </label>
-
-            <label className="col-span-2 block">
-              <span className="text-xs text-zinc-500">Snack Level</span>
-              <select
-                value={dailyForm.snackLevel}
-                onChange={(event) =>
-                  setDailyForm({ ...dailyForm, snackLevel: event.target.value })
-                }
-                className="mt-1 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
-              >
-                <option value="none">None</option>
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-              </select>
-            </label>
-          </div>
-
-          <textarea
-            value={dailyForm.notes}
-            onChange={(event) =>
-              setDailyForm({ ...dailyForm, notes: event.target.value })
-            }
-            placeholder="Notes for today"
-            className="mt-3 min-h-20 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
-          />
-
-          <div className="mt-4 grid grid-cols-3 gap-3">
-            <button
-              onClick={() => quickAddWater(0.25)}
-              className="rounded-2xl border border-zinc-800 bg-zinc-950 px-3 py-3 text-sm font-bold text-zinc-200 hover:bg-zinc-900"
-            >
-              +0.25L
-            </button>
-
-            <button
-              onClick={() => quickAddWater(0.5)}
-              className="rounded-2xl border border-zinc-800 bg-zinc-950 px-3 py-3 text-sm font-bold text-zinc-200 hover:bg-zinc-900"
-            >
-              +0.5L
-            </button>
-
-            <button
-              onClick={() => saveDailyForm(dailyForm)}
-              className="rounded-2xl bg-emerald-400 px-3 py-3 text-sm font-black text-zinc-950 hover:bg-emerald-300"
-            >
-              Save
-            </button>
+          <div className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-bold text-zinc-300">
+            {today} · {syncStatus}
           </div>
         </section>
 
-        <section className="mt-5 rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5">
-          <p className="text-sm text-zinc-400">Quick Add</p>
-          <h2 className="mt-1 text-2xl font-black">Log fast</h2>
+        <section className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr] xl:items-start">
+          <aside className="space-y-5 xl:sticky xl:top-28">
+            <section className="recode-card-strong rounded-[2rem] p-6 md:p-8">
+              <div className="flex items-start justify-between gap-5">
+                <div>
+                  <p className="text-sm font-bold text-emerald-200">System Score</p>
+                  <p className="mt-4 text-8xl font-black tracking-tighter md:text-9xl">
+                    {score}
+                  </p>
+                  <p className="mt-1 text-2xl font-black text-zinc-200">
+                    {getStatusText(score)}
+                  </p>
+                </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <QuickButton
-              label="+ Whey"
-              sub="25g · 120 kcal"
-              onClick={() =>
-                quickAddFood({
-                  foodName: "Whey 1 scoop",
-                  proteinValue: 25,
-                  caloriesValue: 120,
-                  mealType: "drink",
-                })
-              }
-            />
+                <div className="rounded-full bg-emerald-400 px-3 py-1 text-xs font-black text-zinc-950">
+                  LIVE
+                </div>
+              </div>
 
-            <QuickButton
-              label="+ Eggs"
-              sub="12g · 140 kcal"
-              onClick={() =>
-                quickAddFood({
-                  foodName: "Eggs 2 pcs",
-                  proteinValue: 12,
-                  caloriesValue: 140,
-                  mealType: "breakfast",
-                })
-              }
-            />
+              <div className="mt-6 h-3 overflow-hidden rounded-full bg-black/35">
+                <div
+                  className="h-full rounded-full bg-emerald-400"
+                  style={{ width: `${score}%` }}
+                />
+              </div>
 
-            <QuickButton
-              label="+ Chicken"
-              sub="35g · 180 kcal"
-              onClick={() =>
-                quickAddFood({
-                  foodName: "Chicken breast",
-                  proteinValue: 35,
-                  caloriesValue: 180,
-                  mealType: "lunch",
-                })
-              }
-            />
+              <p className="mt-5 text-sm leading-6 text-zinc-200">{coachLine}</p>
+            </section>
 
-            <QuickButton
-              label="+ Milk"
-              sub="8g · 130 kcal"
-              onClick={() =>
-                quickAddFood({
-                  foodName: "Milk",
-                  proteinValue: 8,
-                  caloriesValue: 130,
-                  mealType: "drink",
-                })
-              }
-            />
+            <section className="recode-card rounded-[2rem] p-5 md:p-6">
+              <p className="text-sm font-bold text-zinc-500">Today Metrics</p>
 
-            <QuickButton
-              label="+ Badminton"
-              sub="120 min"
-              onClick={() =>
-                quickAddWorkout({
-                  type: "badminton",
-                  minutes: 120,
-                  label: "Badminton 120 min",
-                })
-              }
-            />
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <MetricCard
+                  label="Protein"
+                  value={`${protein}g`}
+                  goal={`${goals.proteinGoal}g`}
+                  percent={getPercent(protein, goals.proteinGoal)}
+                  href="/food"
+                />
 
-            <QuickButton
-              label="+ Walk"
-              sub="30 min"
-              onClick={() =>
-                quickAddWorkout({
-                  type: "walking",
-                  minutes: 30,
-                  label: "Walk 30 min",
-                })
-              }
-            />
+                <MetricCard
+                  label="Calories"
+                  value={`${calories}`}
+                  goal={`${goals.calorieGoal}`}
+                  percent={getPercent(calories, goals.calorieGoal)}
+                  href="/food"
+                />
 
-            <QuickButton
-              label="+ Home"
-              sub="15 min"
-              onClick={() =>
-                quickAddWorkout({
-                  type: "home-workout",
-                  minutes: 15,
-                  label: "Home Workout 15 min",
-                })
-              }
-            />
+                <MetricCard
+                  label="Burn"
+                  value={`${burn}`}
+                  goal="kcal"
+                  percent={getPercent(burn, 500)}
+                  href="/workout"
+                />
 
-            <QuickButton
-              label="+ Stretch"
-              sub="15 min"
-              onClick={() =>
-                quickAddWorkout({
-                  type: "stretching",
-                  minutes: 15,
-                  label: "Stretch 15 min",
-                })
-              }
-            />
-          </div>
-        </section>
+                <MetricCard
+                  label="Net"
+                  value={`${netCalories}`}
+                  goal="food - burn"
+                  percent={getPercent(Math.max(netCalories, 0), goals.calorieGoal)}
+                  href="/coach"
+                />
 
-        <section className="mt-5 grid grid-cols-2 gap-3">
-          <MetricCard
-            label="Protein"
-            value={`${protein}g`}
-            goal={`${goals.proteinGoal}g`}
-            percent={getPercent(protein, goals.proteinGoal)}
-            href="/food"
-          />
+                <MetricCard
+                  label="Workout"
+                  value={`${workoutMinutes}m`}
+                  goal={`${goals.workoutGoal}m`}
+                  percent={getPercent(workoutMinutes, goals.workoutGoal)}
+                  href="/workout"
+                />
 
-          <MetricCard
-            label="Calories"
-            value={`${calories}`}
-            goal={`${goals.calorieGoal}`}
-            percent={getPercent(calories, goals.calorieGoal)}
-            href="/food"
-          />
+                <MetricCard
+                  label="Water"
+                  value={`${water}L`}
+                  goal={`${goals.waterGoal}L`}
+                  percent={getPercent(water, goals.waterGoal)}
+                  href="/today"
+                />
+              </div>
+            </section>
 
-          <MetricCard
-            label="Burn"
-            value={`${burn}`}
-            goal="kcal"
-            percent={getPercent(burn, 500)}
-            href="/workout"
-          />
+            <section className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
+              <QuickAction
+                href="/food"
+                title="Food"
+                description="Full log and edit"
+              />
 
-          <MetricCard
-            label="Net"
-            value={`${netCalories}`}
-            goal="food - burn"
-            percent={getPercent(Math.max(netCalories, 0), goals.calorieGoal)}
-            href="/coach"
-          />
+              <QuickAction
+                href="/workout"
+                title="Workout"
+                description="Movement details"
+              />
 
-          <MetricCard
-            label="Workout"
-            value={`${workoutMinutes}m`}
-            goal={`${goals.workoutGoal}m`}
-            percent={getPercent(workoutMinutes, goals.workoutGoal)}
-            href="/workout"
-          />
+              <QuickAction
+                href="/coach"
+                title="Coach"
+                description="What to fix next"
+              />
+            </section>
+          </aside>
 
-          <MetricCard
-            label="Water"
-            value={`${water}L`}
-            goal={`${goals.waterGoal}L`}
-            percent={getPercent(water, goals.waterGoal)}
-            href="/today"
-          />
-        </section>
+          <section className="space-y-5">
+            <section className="recode-card rounded-[2rem] p-5 md:p-6">
+              <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
+                <div>
+                  <p className="text-sm font-bold text-zinc-500">Daily Check-in</p>
+                  <h2 className="mt-1 text-3xl font-black">Baseline today</h2>
+                </div>
 
-        <section className="mt-5 grid gap-3">
-          <QuickAction
-            href="/food"
-            title="Open Food"
-            description="Full food log, edit, delete, and notes"
-          />
+                <button
+                  onClick={() => saveDailyForm(dailyForm)}
+                  className="recode-button-primary"
+                >
+                  Save Check-in
+                </button>
+              </div>
 
-          <QuickAction
-            href="/workout"
-            title="Open Workout"
-            description="Full workout log, edit, delete, and details"
-          />
+              <div className="mt-6 grid gap-4 md:grid-cols-4">
+                <Input
+                  label="Weight kg"
+                  type="number"
+                  step="0.1"
+                  value={String(dailyForm.weight)}
+                  onChange={(value) =>
+                    setDailyForm({ ...dailyForm, weight: Number(value) })
+                  }
+                />
 
-          <QuickAction
-            href="/coach"
-            title="Open Coach"
-            description="See what to fix now"
-          />
+                <Input
+                  label="Sleep hours"
+                  type="number"
+                  step="0.5"
+                  value={String(dailyForm.sleep)}
+                  onChange={(value) =>
+                    setDailyForm({ ...dailyForm, sleep: Number(value) })
+                  }
+                />
+
+                <Input
+                  label="Water liters"
+                  type="number"
+                  step="0.25"
+                  value={String(dailyForm.water)}
+                  onChange={(value) =>
+                    setDailyForm({ ...dailyForm, water: Number(value) })
+                  }
+                />
+
+                <label className="block">
+                  <span className="recode-label">Mood</span>
+                  <select
+                    value={dailyForm.mood}
+                    onChange={(event) =>
+                      setDailyForm({ ...dailyForm, mood: event.target.value })
+                    }
+                    className="recode-input"
+                  >
+                    <option value="great">Great</option>
+                    <option value="good">Good</option>
+                    <option value="neutral">Neutral</option>
+                    <option value="tired">Tired</option>
+                    <option value="bad">Bad</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="mt-4 grid gap-4 md:grid-cols-[0.65fr_1.35fr]">
+                <label className="block">
+                  <span className="recode-label">Snack Level</span>
+                  <select
+                    value={dailyForm.snackLevel}
+                    onChange={(event) =>
+                      setDailyForm({
+                        ...dailyForm,
+                        snackLevel: event.target.value,
+                      })
+                    }
+                    className="recode-input"
+                  >
+                    <option value="none">None</option>
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="recode-label">Notes</span>
+                  <input
+                    value={dailyForm.notes}
+                    onChange={(event) =>
+                      setDailyForm({ ...dailyForm, notes: event.target.value })
+                    }
+                    placeholder="Energy, hunger, knee, mood, or anything important"
+                    className="recode-input"
+                  />
+                </label>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-3 md:flex">
+                <button
+                  onClick={() => quickAddWater(0.25)}
+                  className="recode-button-ghost"
+                >
+                  +0.25L Water
+                </button>
+
+                <button
+                  onClick={() => quickAddWater(0.5)}
+                  className="recode-button-ghost"
+                >
+                  +0.5L Water
+                </button>
+              </div>
+            </section>
+
+            <section className="recode-card rounded-[2rem] p-5 md:p-6">
+              <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
+                <div>
+                  <p className="text-sm font-bold text-zinc-500">Quick Add</p>
+                  <h2 className="mt-1 text-3xl font-black">Log fast</h2>
+                </div>
+
+                <p className="text-sm text-zinc-500">
+                  One tap actions for repeat meals and workouts.
+                </p>
+              </div>
+
+              <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+                <QuickButton
+                  label="+ Whey"
+                  sub="25g · 120 kcal"
+                  onClick={() =>
+                    quickAddFood({
+                      foodName: "Whey 1 scoop",
+                      proteinValue: 25,
+                      caloriesValue: 120,
+                      mealType: "drink",
+                    })
+                  }
+                />
+
+                <QuickButton
+                  label="+ Eggs"
+                  sub="12g · 140 kcal"
+                  onClick={() =>
+                    quickAddFood({
+                      foodName: "Eggs 2 pcs",
+                      proteinValue: 12,
+                      caloriesValue: 140,
+                      mealType: "breakfast",
+                    })
+                  }
+                />
+
+                <QuickButton
+                  label="+ Chicken"
+                  sub="35g · 180 kcal"
+                  onClick={() =>
+                    quickAddFood({
+                      foodName: "Chicken breast",
+                      proteinValue: 35,
+                      caloriesValue: 180,
+                      mealType: "lunch",
+                    })
+                  }
+                />
+
+                <QuickButton
+                  label="+ Milk"
+                  sub="8g · 130 kcal"
+                  onClick={() =>
+                    quickAddFood({
+                      foodName: "Milk",
+                      proteinValue: 8,
+                      caloriesValue: 130,
+                      mealType: "drink",
+                    })
+                  }
+                />
+
+                <QuickButton
+                  label="+ Badminton"
+                  sub="120 min"
+                  onClick={() =>
+                    quickAddWorkout({
+                      type: "badminton",
+                      minutes: 120,
+                      label: "Badminton 120 min",
+                    })
+                  }
+                />
+
+                <QuickButton
+                  label="+ Walk"
+                  sub="30 min"
+                  onClick={() =>
+                    quickAddWorkout({
+                      type: "walking",
+                      minutes: 30,
+                      label: "Walk 30 min",
+                    })
+                  }
+                />
+
+                <QuickButton
+                  label="+ Home"
+                  sub="15 min"
+                  onClick={() =>
+                    quickAddWorkout({
+                      type: "home-workout",
+                      minutes: 15,
+                      label: "Home Workout 15 min",
+                    })
+                  }
+                />
+
+                <QuickButton
+                  label="+ Stretch"
+                  sub="15 min"
+                  onClick={() =>
+                    quickAddWorkout({
+                      type: "stretching",
+                      minutes: 15,
+                      label: "Stretch 15 min",
+                    })
+                  }
+                />
+              </div>
+            </section>
+
+            <section className="grid gap-5 lg:grid-cols-2">
+              <section className="recode-card rounded-[2rem] p-5 md:p-6">
+                <div className="flex items-end justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-bold text-zinc-500">Food Log</p>
+                    <h2 className="mt-1 text-2xl font-black">Today food</h2>
+                  </div>
+
+                  <Link href="/food" className="text-sm font-black text-emerald-300">
+                    Edit →
+                  </Link>
+                </div>
+
+                <div className="mt-5 grid gap-3">
+                  {todayFood.length === 0 ? (
+                    <EmptyState text="No food logged yet." />
+                  ) : (
+                    todayFood
+                      .slice()
+                      .reverse()
+                      .slice(0, 5)
+                      .map((item) => (
+                        <LogRow
+                          key={item.id}
+                          title={item.foodName}
+                          detail={`${item.protein}g protein · ${item.calories} kcal`}
+                        />
+                      ))
+                  )}
+                </div>
+              </section>
+
+              <section className="recode-card rounded-[2rem] p-5 md:p-6">
+                <div className="flex items-end justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-bold text-zinc-500">Workout Log</p>
+                    <h2 className="mt-1 text-2xl font-black">Today movement</h2>
+                  </div>
+
+                  <Link
+                    href="/workout"
+                    className="text-sm font-black text-emerald-300"
+                  >
+                    Edit →
+                  </Link>
+                </div>
+
+                <div className="mt-5 grid gap-3">
+                  {todayWorkout.length === 0 ? (
+                    <EmptyState text="No workout logged yet." />
+                  ) : (
+                    todayWorkout
+                      .slice()
+                      .reverse()
+                      .slice(0, 5)
+                      .map((item) => (
+                        <LogRow
+                          key={item.id}
+                          title={getWorkoutLabel(item.type)}
+                          detail={`${item.durationMinutes} min · ${item.estimatedCalories} kcal`}
+                        />
+                      ))
+                  )}
+                </div>
+              </section>
+            </section>
+          </section>
         </section>
       </section>
     </main>
   );
-}
-
-function getCurrentWeight(dailyLogs: DailyLog[]) {
-  const todayWeight = dailyLogs.find((log) => log.date === today && log.weight > 0);
-  if (todayWeight) return todayWeight.weight;
-
-  const latest = dailyLogs
-    .filter((log) => log.weight > 0)
-    .sort((a, b) => b.date.localeCompare(a.date))[0];
-
-  return latest?.weight ?? 70;
 }
 
 function MetricCard({
@@ -1106,12 +1220,15 @@ function MetricCard({
   href: string;
 }) {
   return (
-    <Link href={href} className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-4">
-      <p className="text-xs text-zinc-500">{label}</p>
+    <Link
+      href={href}
+      className="rounded-3xl border border-white/5 bg-black/20 p-4 hover:bg-white/[0.04]"
+    >
+      <p className="text-xs font-bold text-zinc-500">{label}</p>
       <p className="mt-2 text-3xl font-black">{value}</p>
       <p className="mt-1 text-xs text-zinc-500">{goal}</p>
 
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-zinc-800">
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
         <div
           className="h-full rounded-full bg-emerald-400"
           style={{ width: `${percent}%` }}
@@ -1133,7 +1250,7 @@ function QuickButton({
   return (
     <button
       onClick={onClick}
-      className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4 text-left hover:bg-zinc-900"
+      className="rounded-2xl border border-white/5 bg-black/20 p-4 text-left hover:bg-white/[0.05]"
     >
       <p className="text-sm font-black text-white">{label}</p>
       <p className="mt-1 text-xs text-zinc-500">{sub}</p>
@@ -1151,10 +1268,7 @@ function QuickAction({
   description: string;
 }) {
   return (
-    <Link
-      href={href}
-      className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 hover:bg-zinc-900"
-    >
+    <Link href={href} className="recode-card rounded-3xl p-5 hover:bg-white/[0.04]">
       <p className="text-xl font-black">{title}</p>
       <p className="mt-1 text-sm text-zinc-400">{description}</p>
     </Link>
@@ -1176,14 +1290,31 @@ function Input({
 }) {
   return (
     <label className="block">
-      <span className="text-xs text-zinc-500">{label}</span>
+      <span className="recode-label">{label}</span>
       <input
         type={type}
         step={step}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-1 w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-emerald-400"
+        className="recode-input"
       />
     </label>
+  );
+}
+
+function LogRow({ title, detail }: { title: string; detail: string }) {
+  return (
+    <div className="rounded-2xl border border-white/5 bg-black/20 p-4">
+      <p className="font-black text-white">{title}</p>
+      <p className="mt-1 text-sm text-zinc-500">{detail}</p>
+    </div>
+  );
+}
+
+function EmptyState({ text }: { text: string }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-white/10 bg-black/10 p-5 text-sm font-bold text-zinc-500">
+      {text}
+    </div>
   );
 }

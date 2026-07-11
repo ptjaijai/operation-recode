@@ -190,6 +190,24 @@ textarea:focus {
   color: white;
 }
 
+/* Desktop ratio fix: stop phone-like narrow pages on computer */
+@media (min-width: 1024px) {
+  .max-w-4xl {
+    max-width: 80rem !important;
+  }
+
+  main > section.mx-auto {
+    padding-left: 2.5rem !important;
+    padding-right: 2.5rem !important;
+  }
+}
+
+@media (min-width: 1440px) {
+  .max-w-4xl {
+    max-width: 88rem !important;
+  }
+}
+
 @media (max-width: 768px) {
   body {
     background:
